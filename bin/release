@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# Tags and pushes a release: bin/release vX.Y.Z. The tag push triggers the
+# release workflow.
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+usage() {
+	echo "usage: release vX.Y.Z" >&2
+	exit 2
+}
+
+die() {
+	printf 'error: %s\n' "$*" >&2
+	exit 1
+}
+
+version_re='^v[0-9]+\.[0-9]+\.[0-9]+$'
+(($# == 1)) && [[ $1 =~ $version_re ]] || usage
+version=$1
+
+[[ -z $(git status --porcelain) ]] || die "the working tree is not clean"
+branch=$(git rev-parse --abbrev-ref HEAD)
+[[ $branch == master ]] || die "release from master, not '$branch'"
+git fetch --quiet origin master
+[[ $(git rev-parse HEAD) == "$(git rev-parse origin/master)" ]] ||
+	die "master differs from origin/master; push or pull first"
+if git rev-parse -q --verify "refs/tags/$version" >/dev/null; then
+	die "tag $version already exists"
+fi
+remote_tag=$(git ls-remote --tags origin "refs/tags/$version")
+[[ -z $remote_tag ]] || die "tag $version already exists on origin"
+
+mise run check
+
+git tag -s "$version" -m "$version"
+git push origin "$version"
+
+repo_url=$(git remote get-url origin)
+repo_url=${repo_url%.git}
+repo_url=${repo_url/#git@github.com:/https:\/\/github.com\/}
+echo "$repo_url/releases/tag/$version"
