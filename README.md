@@ -38,13 +38,15 @@ It refuses to run anywhere but a Tailscale SSH session. Run it directly there: t
 
 ## Auth key
 
-Create a one-use, tagged, short-expiry key in the Tailscale admin console, then copy it to the server without argv or shell history:
+Create a one-use, tagged, short-expiry key in the Tailscale admin console, marked pre-approved if your tailnet uses device approval, then copy it to the server without argv or shell history:
 
 ```sh
 ssh root@<server-ip> 'umask 077; cat > /root/ts.key' < key
 ```
 
 Run install with `TS_AUTHKEY_FILE=/root/ts.key` and `TS_TAGS` set to the tags the key carries. Delete it afterwards: `ssh root@<server-ip> rm /root/ts.key`.
+
+If the tailnet has device approval enabled and the key is not pre-approved, the new node stays held until an admin approves it under Machines in the Tailscale admin console. `tailscale up` prints "To approve your machine, visit (as admin)" and waits, and `install` gives up after 10 minutes (`--timeout=10m`), leaving the firewall untouched and root plus password still working. Approve the node and run `install` again: every step converges, so it continues where it stopped.
 
 ## Inputs
 
