@@ -1,6 +1,6 @@
 install_00_config() {
 	ADMIN_USER=${ADMIN_USER:-admin}
-	TS_HOSTNAME=${TS_HOSTNAME:-$(hostname -s)}
+	TS_HOSTNAME=${TS_HOSTNAME:-}
 	TS_TAGS=${TS_TAGS:-}
 	TS_AUTHKEY_FILE=${TS_AUTHKEY_FILE:-}
 
@@ -17,6 +17,7 @@ config_check_admin_user() {
 }
 
 config_check_hostname() {
+	[[ -n $TS_HOSTNAME ]] || die "TS_HOSTNAME is required, for example TS_HOSTNAME=web1"
 	local re='^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$'
 	[[ $TS_HOSTNAME =~ $re ]] ||
 		die "TS_HOSTNAME '$TS_HOSTNAME' is invalid; use one DNS label: lowercase letters, digits and '-', 1-63 characters, not starting or ending with '-'"
