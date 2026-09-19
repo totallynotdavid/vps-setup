@@ -1,6 +1,6 @@
 install_20_tailscale() {
 	tailscale_ensure_installed
-	systemctl enable --now tailscaled
+	quiet systemctl enable --now tailscaled
 	tailscale_join
 }
 
