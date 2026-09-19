@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Concatenates the fragments into dist/install.sh. Only definitions precede the
+# final `main "$@"`, so a truncated download runs nothing.
+set -euo pipefail
+
+cd "$(dirname "$0")"
+export LC_ALL=C
+
+mkdir -p dist
+{
+	printf '#!/usr/bin/env bash\nset -euo pipefail\n'
+	for file in lib/*.sh steps/install/*.sh steps/close-ssh/*.sh; do
+		printf '\n# %s\n' "$file"
+		cat "$file"
+	done
+	printf '\nmain "$@"\n'
+} >dist/install.sh
+
+(cd dist && sha256sum install.sh >install.sh.sha256)
