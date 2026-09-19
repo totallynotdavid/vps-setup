@@ -1,0 +1,4 @@
+# Steps are invoked by name through compgen, so ShellCheck sees them as unused.
+disable=SC2329
+# tests/config.sh sources the fragments; follow them so their code is checked too.
+external-sources=true
