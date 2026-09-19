@@ -10,8 +10,13 @@ run = "./build"
 description = "Build, lint, check formatting and run the tests"
 depends = ["build"]
 run = [
-	"shellcheck dist/install.sh build tests/*.sh tests/e2e/verify.sh",
+	"shellcheck dist/install.sh build bin/* tests/*.sh tests/e2e/*.sh",
 	"shfmt -ln bash -d .",
 	"tests/guards.sh",
 	"tests/config.sh",
+	"tests/quiet.sh",
 ]
+
+[tasks.release]
+description = "Tag and push a signed release: mise run release vX.Y.Z"
+run = "bin/release"

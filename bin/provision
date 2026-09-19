@@ -1,0 +1,151 @@
+#!/usr/bin/env bash
+# Runs the whole flow from the operator's machine: install, verify the tailnet
+# path, close-ssh, verify again.
+set -euo pipefail
+
+repo=$(cd "$(dirname "$0")/.." && pwd)
+# shellcheck source=tests/e2e/known-hosts.sh
+# shellcheck source-path=SCRIPTDIR/..
+source "$repo/tests/e2e/known-hosts.sh"
+
+print_usage() {
+	cat <<'EOF_USAGE'
+usage: provision [--key FILE] <root@host> <name>
+
+  --key FILE   Tailscale auth key to use instead of the login URL; it is copied
+               to the server for the install and removed afterwards
+  name         Tailscale node name (TS_HOSTNAME)
+
+environment:
+  ADMIN_USER   admin account to create (default: admin)
+  TS_TAGS      comma-separated tags, e.g. tag:server (default: none)
+EOF_USAGE
+}
+
+usage() {
+	print_usage >&2
+	exit 2
+}
+
+log() {
+	printf '==> %s\n' "$*" >&2
+}
+
+die() {
+	printf 'error: %s\n' "$*" >&2
+	exit 1
+}
+
+key_file=
+args=()
+while (($#)); do
+	case $1 in
+	--key)
+		(($# >= 2)) || usage
+		key_file=$2
+		shift 2
+		;;
+	-h | --help)
+		print_usage
+		exit 0
+		;;
+	-*) usage ;;
+	*)
+		args+=("$1")
+		shift
+		;;
+	esac
+done
+((${#args[@]} == 2)) || usage
+target=${args[0]} name=${args[1]}
+[[ $target == root@?* && $target != *@*@* && -n $name ]] || usage
+if [[ -n $key_file && ! -f $key_file ]]; then
+	echo "error: --key '$key_file' is not a file" >&2
+	exit 2
+fi
+
+admin=${ADMIN_USER:-admin}
+public_ip=${target#root@}
+
+tmp=$(mktemp -d)
+key_on_server=0
+# A reinstalled server keeps its IP and gets a new host key, so root's host key
+# lives in a private file that lasts one run and ~/.ssh/known_hosts is untouched.
+root_opts=(-o "ControlPath=$tmp/control" -o "UserKnownHostsFile=$tmp/known_hosts" -o StrictHostKeyChecking=accept-new)
+
+root_ssh() {
+	ssh "${root_opts[@]}" -o ControlMaster=no "$target" "$@"
+}
+
+# Auth keys are one-use, so it goes as soon as install is done and on any exit.
+remove_key() {
+	((key_on_server)) || return 0
+	if root_ssh 'rm -f /root/ts.key' </dev/null; then
+		key_on_server=0
+	else
+		echo "error: could not remove /root/ts.key from $target; delete it by hand" >&2
+		return 1
+	fi
+}
+
+cleanup() {
+	local status=$?
+	remove_key || true
+	ssh "${root_opts[@]}" -O exit "$target" &>/dev/null || true
+	rm -rf "$tmp"
+	exit "$status"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+wait_for_tailnet() {
+	local deadline=$((SECONDS + 90))
+	# Only a reachability probe: verify.sh learns and checks the host key.
+	until ssh -n -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no \
+		-o UserKnownHostsFile=/dev/null -o LogLevel=ERROR "$admin@$name" true 2>/dev/null; do
+		((SECONDS < deadline)) ||
+			die "$admin@$name did not answer over the tailnet within 90 seconds; is this machine on the tailnet? Public SSH is still open"
+		sleep 3
+	done
+}
+
+log "build dist/install.sh"
+"$repo/build"
+
+log "connect to $target"
+ssh "${root_opts[@]}" -o ControlMaster=yes -o ControlPersist=30m "$target" true
+
+if [[ -n $key_file ]]; then
+	log "copy the auth key"
+	key_on_server=1
+	root_ssh 'umask 077; cat >/root/ts.key' <"$key_file"
+fi
+
+log "install"
+remote_env=$(printf 'ADMIN_USER=%q TS_HOSTNAME=%q TS_TAGS=%q' "$admin" "$name" "${TS_TAGS:-}")
+if [[ -n $key_file ]]; then
+	remote_env+=' TS_AUTHKEY_FILE=/root/ts.key'
+fi
+root_ssh "$remote_env bash -s install" <"$repo/dist/install.sh" ||
+	die "install failed; public SSH is still open and nothing was closed"
+remove_key
+
+log "wait for $admin@$name on the tailnet"
+wait_for_tailnet
+
+log "verify the tailnet path"
+"$repo/tests/e2e/verify.sh" installed "$name" "$admin" "$public_ip" ||
+	die "verification failed; public SSH is still open and nothing was closed"
+
+log "close SSH through the tailnet session"
+ssh -o BatchMode=yes -o ConnectTimeout=15 -o StrictHostKeyChecking=yes \
+	-o "UserKnownHostsFile=$(e2e_known_hosts "$name")" \
+	"$admin@$name" 'sudo bash -s close-ssh' <"$repo/dist/install.sh" ||
+	die "close-ssh failed; the output above says where, and running it again is safe"
+
+log "verify SSH is closed"
+"$repo/tests/e2e/verify.sh" closed "$name" "$admin" "$public_ip" ||
+	die "verification after close-ssh failed"
+
+printf 'ssh %s@%s\n' "$admin" "$name"

@@ -9,7 +9,10 @@ if (($# != 4)) || [[ $1 != installed && $1 != closed ]]; then
 fi
 mode=$1 host=$2 admin=$3 public_ip=$4
 
-known_hosts=${TMPDIR:-/tmp}/vps-setup-e2e/$host
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=known-hosts.sh
+source "$(dirname "$0")/known-hosts.sh"
+known_hosts=$(e2e_known_hosts "$host")
 mkdir -p "$(dirname "$known_hosts")"
 host_key_checking=yes
 if [[ $mode == installed ]]; then
@@ -34,12 +37,16 @@ REMOTE
 declare -A facts
 failures=0
 
+# A cold tailnet path can time out on the first connection, right after a firewall reload.
 collect_facts() {
-	local output key value
-	output=$(ssh -o BatchMode=yes -o ConnectTimeout=15 \
-		-o "StrictHostKeyChecking=$host_key_checking" \
-		-o "UserKnownHostsFile=$known_hosts" \
-		"$admin@$host" "$remote_facts") || return 1
+	local output key value attempt
+	for attempt in 1 2 3 4; do
+		output=$(ssh -o BatchMode=yes -o ConnectTimeout=15 \
+			-o "StrictHostKeyChecking=$host_key_checking" \
+			-o "UserKnownHostsFile=$known_hosts" \
+			"$admin@$host" "$remote_facts") && break
+		((attempt < 4)) || return 1
+	done
 	while IFS='=' read -r key value; do
 		[[ $key =~ ^[a-z0-9_]+$ ]] && facts[$key]=$value
 	done <<<"$output"

@@ -7,7 +7,7 @@ usage: install.sh install | close-ssh | -h|--help
 
 environment for install:
   ADMIN_USER       admin account to create (default: admin)
-  TS_HOSTNAME      Tailscale node name (default: hostname -s)
+  TS_HOSTNAME      Tailscale node name, required, e.g. web1
   TS_TAGS          comma-separated tags, e.g. tag:server (default: none)
   TS_AUTHKEY_FILE  file holding a Tailscale auth key (default: log in by URL)
 EOF_USAGE

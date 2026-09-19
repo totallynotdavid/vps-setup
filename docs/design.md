@@ -24,6 +24,8 @@ Each phase checks the OS first, then root. The OS gate comes first so that a wro
 
 **One apt helper.** A fresh box often has unattended-upgrades holding the dpkg lock and needrestart printing prompts. The helper waits for the lock, runs non-interactively and lets needrestart act automatically.
 
+**Quiet by default.** Commands that only need to succeed run through `quiet`, which prints nothing on success and everything they wrote on failure. That keeps the output to the steps and to Tailscale's own prompts, which is why `tailscale up` is the one call that streams: it prints the login or approval prompt and then waits.
+
 ## close-ssh
 
 **Session check first.** Removing OpenSSH from inside an OpenSSH session ends it, and closing SSH without a working Tailscale session leaves no way in. The check walks the process parents: a `tailscaled` ancestor is a Tailscale SSH session, an `sshd` ancestor or reaching PID 1 first is not. A `100.x` source address proves nothing, because OpenSSH over the tailnet has one too. tmux and screen re-parent the shell and break the chain, so they are refused rather than guessed at.
@@ -33,6 +35,10 @@ Each phase checks the OS first, then root. The OS gate comes first so that a wro
 **Remove, never purge.** Tailscale SSH serves the host keys in `/etc/ssh/ssh_host_*`. Purging deletes them, the host key changes and every client warns. Removing keeps them and the fingerprint is unchanged. Removing the package also removes `ssh.socket`, which owns port 22.
 
 **Root lock last.** Once sshd is gone, locking root leaves nothing to lock out. If an earlier step fails, root and its password still work.
+
+## provision
+
+**Verify before close, remove the key.** `bin/provision` runs `close-ssh` only after `verify.sh` has proved the tailnet path from outside, so a Tailscale problem is found while the fallback still exists. It runs `close-ssh` from that same tailnet session, which is the one place the session check accepts. The auth key is deleted from the server even when the run fails: it is one-use, so a leftover file is a secret with no purpose. Root's host key goes in a private per-run file, because a reinstalled server keeps its address and changes its key.
 
 ## Not covered
 
