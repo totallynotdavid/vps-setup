@@ -55,16 +55,22 @@ run bash "$script" --help
 assert "--help exits 0" [ "$status" -eq 0 ]
 assert "--help prints usage" has_usage "$stdout"
 
-# On a matching host these would run for real, so only refusals are tested.
+# Refusals never change the host. Only root on the supported OS would really run install.
 # shellcheck source=/dev/null
-if [[ $(. /etc/os-release && echo "$ID $VERSION_ID") == "ubuntu 26.04" ]]; then
-	echo "SKIP refusal tests: this host is the supported OS"
+os=$(. /etc/os-release && echo "$ID $VERSION_ID")
+if [[ $os == "ubuntu 26.04" ]]; then
+	refusal="must run as root"
+else
+	refusal="unsupported OS"
+fi
+if ((EUID == 0)) && [[ $os == "ubuntu 26.04" ]]; then
+	echo "SKIP refusal tests: running as root on the supported OS"
 else
 	user=vpssetup-guard-test
 	for phase in install close-ssh; do
 		run env ADMIN_USER="$user" bash "$script" "$phase"
-		assert "$phase exits 1 on an unsupported OS" [ "$status" -eq 1 ]
-		assert "$phase reports error: on an unsupported OS" grep -q '^error: unsupported OS' <<<"$stderr"
+		assert "$phase exits 1 with $refusal" [ "$status" -eq 1 ]
+		assert "$phase reports error: $refusal" grep -q "^error: $refusal" <<<"$stderr"
 	done
 	assert "install created no user" user_absent "$user"
 	assert "install wrote no sudoers file" [ ! -e "/etc/sudoers.d/$user" ]
