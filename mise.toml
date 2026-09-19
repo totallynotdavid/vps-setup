@@ -1,0 +1,17 @@
+[tools]
+shellcheck = "0.11.0"
+shfmt = "3.14.1"
+
+[tasks.build]
+description = "Generate dist/install.sh"
+run = "./build"
+
+[tasks.check]
+description = "Build, lint, check formatting and run the tests"
+depends = ["build"]
+run = [
+	"shellcheck dist/install.sh build tests/*.sh tests/e2e/verify.sh",
+	"shfmt -ln bash -d .",
+	"tests/guards.sh",
+	"tests/config.sh",
+]
