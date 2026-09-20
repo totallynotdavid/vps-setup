@@ -1,0 +1,18 @@
+#cloud-config
+disable_root: false
+ssh_pwauth: true
+chpasswd:
+  expire: false
+  users:
+    - name: root
+      type: text
+      password: "${root_password}"
+write_files:
+  # sshd keeps the first value it sees and reads the drop-ins in name order, so
+  # this has to sort before 50-cloud-init.conf.
+  - path: /etc/ssh/sshd_config.d/00-e2e-root-login.conf
+    permissions: "0644"
+    content: |
+      PermitRootLogin yes
+runcmd:
+  - systemctl restart ssh

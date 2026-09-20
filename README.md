@@ -94,6 +94,31 @@ Until `close-ssh` runs, root and its password still work over public SSH. After 
 
 `mise run check` builds, lints, checks formatting and runs the tests. `./build` writes `dist/install.sh` and `dist/install.sh.sha256`; nothing generated is committed.
 
-`tests/e2e/run.sh <root@host> <name> [--key FILE]` is the end-to-end run for a freshly reinstalled server. It calls `bin/provision`, runs `install` and `close-ssh` again through the tailnet session, reboots, and checks the closed state once more. `tests/e2e/verify.sh installed|closed <tailnet-host> <admin-user> <public-ip>` checks a real server. Neither is part of `check`.
+`tests/e2e/run.sh <root@host> <name> [--key FILE]` is the end-to-end run for a freshly reinstalled server. It calls `bin/provision`, runs `install` and `close-ssh` again through the tailnet session, reboots, and checks the closed state once more. `tests/e2e/verify.sh installed|closed <tailnet-host> <admin-user> <public-ip>` checks a real server. Neither is part of `check`; [Testing](#testing) runs the first on AWS.
 
 Release with `mise run release vX.Y.Z`. It refuses unless the tree is clean, the branch is `master` and matches `origin/master`, the tag is new and `mise run check` passes. Then it creates a signed tag, so `git tag -s` needs a signing key, and pushes it. The workflow builds and attaches the two files to a GitHub release.
+
+## Testing
+
+`mise run check` needs nothing beyond the tools in `mise.toml`. The end-to-end run needs a real server, and `mise run e2e:aws` makes one on AWS EC2, so it is not part of `check`. It starts a fresh Ubuntu 26.04 instance that looks like a Contabo one (root login with a password over SSH), runs `tests/e2e/run.sh` against it, then does the same for `tests/e2e/refuse-close.sh`, which checks that `close-ssh` over OpenSSH is refused and leaves sshd installed and root unlocked. Each scenario gets its own instance, because `provision` closes SSH, and every instance is destroyed on any exit.
+
+**Prerequisites**
+
+- A dedicated IAM user for the harness with `tests/e2e/aws/iam-policy.json` attached. It allows EC2 and the Canonical AMI parameter in `us-east-1` only; edit the region in the policy to test elsewhere. Give the harness its credentials with `AWS_PROFILE`, or `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`.
+- `TS_TEST_KEY_FILE`: a file holding a Tailscale auth key that is reusable (one run uses it twice), ephemeral (so the test nodes leave the tailnet), pre-approved and tagged `tag:vps-test`. Your ACL must let you SSH to that tag as the admin user, and this machine must be on the tailnet. Set `TS_TAGS` if the key carries other tags, and `ADMIN_USER` to change the admin account.
+- OpenSSH 8.4 or later on this machine, for `SSH_ASKPASS_REQUIRE`; `mise install` provides `terraform` and `aws`.
+
+**Commands**
+
+| Command                   | Does                                                                        |
+| ------------------------- | --------------------------------------------------------------------------- |
+| `mise run e2e:aws`        | both scenarios, each on its own instance; exits non-zero if either fails    |
+| `mise run e2e:aws:up`     | creates one instance and prints its public IP                               |
+| `mise run e2e:aws:down`   | destroys it; safe to repeat                                                 |
+| `mise run e2e:aws:sweep`  | terminates leftover instances and security groups tagged `purpose=vps-setup-e2e` older than two hours |
+
+`tests/e2e/aws.sh up|run|refuse|down|sweep|all` is the same interface without mise. Set `AWS_REGION` to change the region. A missing input exits with status 2 and names what to set, before any AWS call.
+
+The generated root password is kept only in Terraform state under `tests/e2e/aws/`, which is gitignored. It reaches SSH through `SSH_ASKPASS` and never appears in argv or in any other file. If a run crashes, run `mise run e2e:aws:down`, or `mise run e2e:aws:sweep` when the state is gone.
+
+**Cost.** One t3.micro with a 16 GB root volume and a public IPv4 costs roughly 2 US cents an hour at on-demand list prices, and a full run takes under an hour, so a run costs a few cents. A leftover instance costs the same until `sweep` removes it.

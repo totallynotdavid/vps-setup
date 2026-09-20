@@ -1,6 +1,8 @@
 [tools]
+aws-cli = "2"
 shellcheck = "0.11.0"
 shfmt = "3.14.1"
+terraform = "1.16"
 
 [tasks.build]
 description = "Generate dist/install.sh"
@@ -12,10 +14,29 @@ depends = ["build"]
 run = [
 	"shellcheck dist/install.sh build bin/* tests/*.sh tests/e2e/*.sh",
 	"shfmt -ln bash -d .",
+	"terraform -chdir=tests/e2e/aws fmt -check -recursive",
+	"terraform -chdir=tests/e2e/aws init -input=false -backend=false",
+	"terraform -chdir=tests/e2e/aws validate",
 	"tests/guards.sh",
 	"tests/config.sh",
 	"tests/quiet.sh",
 ]
+
+[tasks."e2e:aws"]
+description = "Create an EC2 server, run both end-to-end scenarios against it and destroy it"
+run = "tests/e2e/aws.sh all"
+
+[tasks."e2e:aws:up"]
+description = "Create the EC2 server and print its public IP"
+run = "tests/e2e/aws.sh up"
+
+[tasks."e2e:aws:down"]
+description = "Destroy the EC2 server"
+run = "tests/e2e/aws.sh down"
+
+[tasks."e2e:aws:sweep"]
+description = "Terminate end-to-end leftovers older than two hours"
+run = "tests/e2e/aws.sh sweep"
 
 [tasks.release]
 description = "Tag and push a signed release: mise run release vX.Y.Z"
