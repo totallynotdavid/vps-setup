@@ -4,7 +4,10 @@ install_10_user() {
 }
 
 user_create() {
-	id "$ADMIN_USER" &>/dev/null || quiet adduser --disabled-password --gecos "" "$ADMIN_USER"
+	local group_args=()
+	# adduser refuses a user whose same-named group exists; Ubuntu ships an admin group
+	getent group "$ADMIN_USER" &>/dev/null && group_args=(--ingroup "$ADMIN_USER")
+	id "$ADMIN_USER" &>/dev/null || quiet adduser --disabled-password --gecos "" "${group_args[@]}" "$ADMIN_USER"
 	quiet usermod -aG sudo "$ADMIN_USER"
 }
 
