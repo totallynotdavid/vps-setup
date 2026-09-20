@@ -1,0 +1,125 @@
+#!/usr/bin/env bash
+# Prints a Tailscale auth key for a key file: a plain auth key unchanged, or,
+# for an OAuth client secret, a one-use key minted through the Tailscale API.
+set -euo pipefail
+
+print_usage() {
+	cat <<'EOF_USAGE'
+usage: resolve-key FILE
+
+  FILE   its first line is a Tailscale auth key, printed unchanged, or an OAuth
+         client secret (tskey-client-...), which mints a one-use, pre-approved
+         auth key that expires in an hour
+
+environment, for an OAuth client secret:
+  TS_TAGS       required; comma-separated tags, equal to the client's or owned by them
+  TS_EPHEMERAL  1 mints an ephemeral key (default: not ephemeral)
+  TS_HOSTNAME   optional; named in the key's description
+EOF_USAGE
+}
+
+usage() {
+	print_usage >&2
+	exit 2
+}
+
+die() {
+	printf 'error: %s\n' "$*" >&2
+	exit 1
+}
+
+case ${1:-} in
+-h | --help)
+	print_usage
+	exit 0
+	;;
+esac
+(($# == 1)) || usage
+file=$1
+[[ -f $file && -r $file ]] || die "'$file' is not a readable file"
+
+line=
+IFS= read -r line <"$file" || true
+line=${line//$'\r'/}
+line=${line#"${line%%[![:space:]]*}"}
+line=${line%"${line##*[![:space:]]}"}
+[[ -n $line ]] || die "'$file' has no key on its first line"
+if [[ $line != tskey-client-* ]]; then
+	printf '%s\n' "$line"
+	exit 0
+fi
+
+# tailscale up takes ?ephemeral=..&preauthorized=.. after the secret; TS_EPHEMERAL decides here.
+secret=${line%%\?*}
+[[ $secret =~ ^tskey-client-([A-Za-z0-9]+)-[A-Za-z0-9_-]+$ ]] ||
+	die "the OAuth client secret in '$file' is malformed; expected tskey-client-<id>-<secret>"
+client_id=${BASH_REMATCH[1]}
+
+[[ -n ${TS_TAGS:-} ]] ||
+	die "an OAuth client secret needs TS_TAGS matching the client's tags, e.g. TS_TAGS=tag:server"
+IFS=, read -ra tags <<<"$TS_TAGS"
+tags_json=
+for tag in "${tags[@]}"; do
+	[[ $tag =~ ^tag:[a-z0-9-]+$ ]] || die "TS_TAGS entry '$tag' is not tag:[a-z0-9-]+"
+	tags_json+=${tags_json:+,}\"$tag\"
+done
+
+ephemeral=false
+if [[ ${TS_EPHEMERAL:-} == 1 ]]; then
+	ephemeral=true
+fi
+
+# The API allows 50 characters of alphanumerics, hyphens and spaces.
+host=${TS_HOSTNAME:-}
+host=${host//[^A-Za-z0-9 -]/}
+description="vps-setup ${host:0:40}"
+description=${description%" "}
+
+# Quotes a value for curl's config syntax.
+quote() {
+	local value=${1//\\/\\\\}
+	printf '"%s"' "${value//\"/\\\"}"
+}
+
+# The request goes to curl as a config on stdin: argv shows in ps, and -q keeps
+# a ~/.curlrc from adding options such as trace files.
+post() {
+	local url=$1 data=$2 header
+	shift 2
+	{
+		printf '%s\n' silent show-error 'connect-timeout = 10' 'max-time = 30'
+		printf 'url = %s\n' "$(quote "$url")"
+		for header; do
+			printf 'header = %s\n' "$(quote "$header")"
+		done
+		printf 'data = %s\n' "$(quote "$data")"
+	} | curl -q --config -
+}
+
+field() {
+	sed -n "s/.*\"$1\" *: *\"\([^\"]*\)\".*/\1/p" <<<"$2" | head -n 1
+}
+
+api_error() {
+	local message
+	message=$(field message "$1")
+	message=${message//"$secret"/[redacted]}
+	die "Tailscale API: ${message:-unexpected response}"
+}
+
+api=https://api.tailscale.com/api/v2
+
+response=$(post "$api/oauth/token" \
+	"grant_type=client_credentials&client_id=$client_id&client_secret=$secret") ||
+	die "could not reach the Tailscale API"
+token=$(field access_token "$response")
+[[ $token =~ ^[A-Za-z0-9._~+/=-]+$ ]] || api_error "$response"
+
+printf -v body '{"capabilities":{"devices":{"create":{"reusable":false,"ephemeral":%s,"preauthorized":true,"tags":[%s]}}},"expirySeconds":3600,"description":"%s"}' \
+	"$ephemeral" "$tags_json" "$description"
+response=$(post "$api/tailnet/-/keys" "$body" "Authorization: Bearer $token" "Content-Type: application/json") ||
+	die "could not reach the Tailscale API"
+key=$(field key "$response")
+[[ $key =~ ^[A-Za-z0-9._~+/=-]+$ ]] || api_error "$response"
+
+printf '%s\n' "$key"
