@@ -40,6 +40,8 @@ Each phase checks the OS first, then root. The OS gate comes first so that a wro
 
 **Verify before close, remove the key.** `bin/provision` runs `close-ssh` only after `verify.sh` has proved the tailnet path from outside, so a Tailscale problem is found while the fallback still exists. It runs `close-ssh` from that same tailnet session, which is the one place the session check accepts. The auth key is deleted from the server even when the run fails: it is one-use, so a leftover file is a secret with no purpose. Root's host key goes in a private per-run file, because a reinstalled server keeps its address and changes its key.
 
+**Mint the key locally.** An OAuth client secret is long-lived, so it stays on the operator's machine. `bin/resolve-key` trades it for a one-use, pre-approved key that expires in an hour, and only that key is copied to the server. It runs before the server is touched, so a bad secret fails early. The key is not ephemeral unless asked: an ephemeral node leaves the tailnet when it goes offline, which a real server must not do. Secrets travel to `curl` on stdin, never in argv, where `ps` shows them.
+
 ## Not covered
 
 - Ubuntu 24.04 and other releases: the OS gate refuses them.

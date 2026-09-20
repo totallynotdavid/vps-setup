@@ -17,7 +17,7 @@ git clone https://github.com/totallynotdavid/vps-setup && cd vps-setup
 ADMIN_USER=ops TS_TAGS=tag:server bin/provision --key ./ts.key root@203.0.113.7 web1
 ```
 
-`root@203.0.113.7` is where to log in, `web1` becomes the Tailscale node name, and `ADMIN_USER` and `TS_TAGS` are optional. It builds the script, asks for the root password once, runs `install`, and checks the Tailscale path before it closes anything: if that check fails it stops with public SSH still open. Then it runs `close-ssh` through the tailnet session, checks again and prints the `ssh` command to use from now on. Without `--key`, `tailscale up` prints a login URL and waits ten minutes for you to open it. With `--key`, the auth key is copied to the server and removed again, whether or not the run succeeds. See [Auth key](#auth-key).
+`root@203.0.113.7` is where to log in, `web1` becomes the Tailscale node name, and `ADMIN_USER` and `TS_TAGS` are optional. It builds the script, asks for the root password once, runs `install`, and checks the Tailscale path before it closes anything: if that check fails it stops with public SSH still open. Then it runs `close-ssh` through the tailnet session, checks again and prints the `ssh` command to use from now on. Without `--key`, `tailscale up` prints a login URL and waits ten minutes for you to open it. With `--key`, an auth key is copied to the server and removed again, whether or not the run succeeds. See [Auth key](#auth-key).
 
 **Manually.** Each step of the same flow, without the driver.
 
@@ -50,15 +50,24 @@ It refuses to run anywhere but a Tailscale SSH session. Run it directly there: t
 
 ## Auth key
 
-Create a one-use, tagged, short-expiry key in the Tailscale admin console, and mark it pre-approved if your tailnet uses device approval. `bin/provision --key FILE` handles the rest. By hand, copy it to the server without argv or shell history:
+Recommended: create an OAuth client once. In the admin console open Trust credentials, add a Credential, choose OAuth, give it the scope Auth Keys with Write, and set its tags to the ones you pass in `TS_TAGS`. Save the secret (`tskey-client-...`) in a file only you can read and pass it with `--key`:
+
+```sh
+(umask 077; cat > oauth.key)   # paste the secret, then Ctrl-D
+TS_TAGS=tag:server bin/provision --key ./oauth.key root@203.0.113.7 web1
+```
+
+`bin/provision` mints a key on your machine and copies only that key to the server. It is one-use, pre-approved and expires in an hour. It is not ephemeral, because an ephemeral node leaves the tailnet when it goes offline and a real server must not; set `TS_EPHEMERAL=1` for a throwaway one. `TS_TAGS` is required and must equal the client's tags or be owned by them. The long-lived secret never leaves your machine, and it never appears in a command line.
+
+The alternative is one key per server: create a one-use, tagged, short-expiry auth key in the admin console, and mark it pre-approved if your tailnet uses device approval. `bin/provision --key FILE` takes it the same way, and copies it as it is. By hand, copy it to the server without argv or shell history:
 
 ```sh
 ssh root@<server-ip> 'umask 077; cat > /root/ts.key' < key
 ```
 
-Run install with `TS_AUTHKEY_FILE=/root/ts.key` and `TS_TAGS` set to the tags the key carries, then delete it: `ssh root@<server-ip> rm /root/ts.key`.
+Run install with `TS_AUTHKEY_FILE=/root/ts.key` and `TS_TAGS` set to the tags the key carries, then delete it: `ssh root@<server-ip> rm /root/ts.key`. If you run the script by hand or with `curl | bash`, put an auth key there. An OAuth secret works in `TS_AUTHKEY_FILE` only in the tailscale CLI's own form, with `?ephemeral=false&preauthorized=true` after it, because the CLI defaults to ephemeral and a real server must not leave the tailnet when it goes offline. `bin/provision` is better because the server then never sees the long-lived secret.
 
-Without pre-approval on such a tailnet, the node stays held until an admin approves it under Machines. `tailscale up` prints "To approve your machine, visit (as admin)" and waits, and `install` gives up after 10 minutes with the firewall untouched and root plus password still working. Approve the node and run `install` again: it continues where it stopped.
+Without pre-approval on a tailnet that uses device approval, the node stays held until an admin approves it under Machines. `tailscale up` prints "To approve your machine, visit (as admin)" and waits, and `install` gives up after 10 minutes with the firewall untouched and root plus password still working. Approve the node and run `install` again: it continues where it stopped.
 
 ## Inputs
 
@@ -105,7 +114,7 @@ Release with `mise run release vX.Y.Z`. It refuses unless the tree is clean, the
 **Prerequisites**
 
 - A dedicated IAM user for the harness with `tests/e2e/aws/iam-policy.json` attached. It allows EC2 and the Canonical AMI parameter in `us-east-1` only; edit the region in the policy to test elsewhere. Give the harness its credentials with `AWS_PROFILE`, or `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`.
-- `TS_TEST_KEY_FILE`: a file holding a Tailscale auth key that is reusable (one run uses it twice), ephemeral (so the test nodes leave the tailnet), pre-approved and tagged `tag:vps-test`. Your ACL must let you SSH to that tag as the admin user, and this machine must be on the tailnet. Set `TS_TAGS` if the key carries other tags, and `ADMIN_USER` to change the admin account.
+- `TS_TEST_KEY_FILE`: a file holding an OAuth client secret for `tag:vps-test` (scope Auth Keys with Write). Each scenario mints its own ephemeral, pre-approved key from it, so the test nodes leave the tailnet. A Tailscale auth key that is reusable (one run uses it twice), ephemeral, pre-approved and tagged `tag:vps-test` still works. Your ACL must let you SSH to that tag as the admin user, and this machine must be on the tailnet. Set `TS_TAGS` if the client or key carries other tags, and `ADMIN_USER` to change the admin account.
 - OpenSSH 8.4 or later on this machine, for `SSH_ASKPASS_REQUIRE`; `mise install` provides `terraform` and `aws`.
 
 **Commands**

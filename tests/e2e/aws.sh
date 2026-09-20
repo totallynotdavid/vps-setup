@@ -11,6 +11,7 @@ region=${AWS_REGION:-us-east-1}
 TS_TAGS=${TS_TAGS:-tag:vps-test}
 max_age=$((2 * 3600))
 export TS_TAGS
+export TS_EPHEMERAL=1
 export TF_VAR_region=$region
 
 print_usage() {
@@ -26,9 +27,9 @@ usage: aws.sh up | run | refuse | down | sweep | all
 
 environment:
   AWS_PROFILE        or AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY; for every command
-  TS_TEST_KEY_FILE   file holding a Tailscale auth key; for run, refuse and all
+  TS_TEST_KEY_FILE   file holding an OAuth client secret or an auth key; for run, refuse and all
   ADMIN_USER         admin account to create (default: admin)
-  TS_TAGS            tags of the key (default: tag:vps-test)
+  TS_TAGS            tags of the key or client (default: tag:vps-test)
   AWS_REGION         region (default: us-east-1)
 EOF_USAGE
 }
@@ -60,7 +61,7 @@ require_inputs() {
 	done
 	if ((needs_key)); then
 		if [[ -z ${TS_TEST_KEY_FILE:-} ]]; then
-			problems+=("TS_TEST_KEY_FILE is not set; set it to a file holding a reusable, ephemeral Tailscale auth key for $TS_TAGS")
+			problems+=("TS_TEST_KEY_FILE is not set; set it to a file holding an OAuth client secret, or a reusable, ephemeral auth key, for $TS_TAGS")
 		elif [[ ! -f $TS_TEST_KEY_FILE || ! -r $TS_TEST_KEY_FILE ]]; then
 			problems+=("TS_TEST_KEY_FILE='$TS_TEST_KEY_FILE' is not a readable file")
 		fi
