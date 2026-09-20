@@ -111,6 +111,9 @@ root_password_unlocked() {
 	[[ $root_state == *"root_password=P"* ]]
 }
 
+log "resolve the auth key"
+(umask 077 && TS_HOSTNAME=$name "$repo/bin/resolve-key" "$key_file" >"$tmp/ts.key")
+
 log "build dist/install.sh"
 "$repo/build"
 
@@ -119,7 +122,7 @@ ssh "${root_opts[@]}" -o ControlMaster=yes -o ControlPersist=30m "$target" true
 
 log "copy the auth key"
 key_on_server=1
-root_ssh 'umask 077; cat >/root/ts.key' <"$key_file"
+root_ssh 'umask 077; cat >/root/ts.key' <"$tmp/ts.key"
 
 log "install"
 remote_env=$(printf 'ADMIN_USER=%q TS_HOSTNAME=%q TS_TAGS=%q TS_AUTHKEY_FILE=/root/ts.key' "$admin" "$name" "${TS_TAGS:-}")

@@ -12,13 +12,17 @@ print_usage() {
 	cat <<'EOF_USAGE'
 usage: provision [--key FILE] <root@host> <name>
 
-  --key FILE   Tailscale auth key to use instead of the login URL; it is copied
-               to the server for the install and removed afterwards
+  --key FILE   Tailscale auth key, or OAuth client secret (tskey-client-...), to
+               use instead of the login URL. A client secret mints a one-use key
+               here, and only that key is copied to the server for the install
+               and removed afterwards
   name         Tailscale node name (TS_HOSTNAME)
 
 environment:
   ADMIN_USER   admin account to create (default: admin)
-  TS_TAGS      comma-separated tags, e.g. tag:server (default: none)
+  TS_TAGS      comma-separated tags, e.g. tag:server (default: none; required
+               with a client secret, and equal to the client's tags)
+  TS_EPHEMERAL 1 makes a key minted from a client secret ephemeral (default: no)
 EOF_USAGE
 }
 
@@ -110,6 +114,12 @@ wait_for_tailnet() {
 	done
 }
 
+# Resolved before the server is touched, so a bad secret fails early.
+if [[ -n $key_file ]]; then
+	log "resolve the auth key"
+	(umask 077 && TS_HOSTNAME=$name "$repo/bin/resolve-key" "$key_file" >"$tmp/ts.key")
+fi
+
 log "build dist/install.sh"
 "$repo/build"
 
@@ -119,7 +129,7 @@ ssh "${root_opts[@]}" -o ControlMaster=yes -o ControlPersist=30m "$target" true
 if [[ -n $key_file ]]; then
 	log "copy the auth key"
 	key_on_server=1
-	root_ssh 'umask 077; cat >/root/ts.key' <"$key_file"
+	root_ssh 'umask 077; cat >/root/ts.key' <"$tmp/ts.key"
 fi
 
 log "install"
