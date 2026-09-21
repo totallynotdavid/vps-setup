@@ -7,10 +7,13 @@ locals {
     purpose = "vps-setup-e2e"
     run_id  = var.run_id
   }
+
+  # Canonical publishes 20.04 and 22.04 under ebs-gp2 and later releases under ebs-gp3, never both.
+  ebs_type = contains(["20.04", "22.04"], var.ubuntu_version) ? "ebs-gp2" : "ebs-gp3"
 }
 
 data "aws_ssm_parameter" "ubuntu_ami" {
-  name = "/aws/service/canonical/ubuntu/server/${var.ubuntu_version}/stable/current/amd64/hvm/ebs-gp3/ami-id"
+  name = "/aws/service/canonical/ubuntu/server/${var.ubuntu_version}/stable/current/amd64/hvm/${local.ebs_type}/ami-id"
 }
 
 data "aws_vpc" "default" {

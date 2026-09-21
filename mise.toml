@@ -18,6 +18,7 @@ run = [
 	"terraform -chdir=tests/e2e/aws init -input=false -backend=false",
 	"terraform -chdir=tests/e2e/aws validate",
 	"tests/guards.sh",
+	"tests/os.sh",
 	"tests/config.sh",
 	"tests/quiet.sh",
 	"tests/resolve-key.sh",
@@ -26,6 +27,10 @@ run = [
 [tasks."e2e:aws"]
 description = "Create an EC2 server, run both end-to-end scenarios against it and destroy it"
 run = "tests/e2e/aws.sh all"
+
+[tasks."e2e:aws:releases"]
+description = "Run the end-to-end on every supported Ubuntu release, one after another, and report each"
+run = "tests/e2e/aws.sh releases"
 
 [tasks."e2e:aws:up"]
 description = "Create the EC2 server and print its public IP"

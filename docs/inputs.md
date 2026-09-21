@@ -20,8 +20,9 @@ tailnet.
 `--help` print the usage and exit 0. Any other call prints the usage and exits 2.
 `close-ssh` reads no variables.
 
-Every run fails with status 1 before it changes anything unless the OS is Ubuntu
-26.04 and the caller is root.
+Every run fails with status 1 before it changes anything unless the OS is one of
+the releases that `supported_os` lists in [`lib/os.sh`](../lib/os.sh) and the
+caller is root.
 
 ## `bin/provision`
 
