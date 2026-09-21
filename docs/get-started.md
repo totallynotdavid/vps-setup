@@ -40,23 +40,28 @@ you to open it. With `--key`, the run needs no browser. See
 2. Connects as root. `ssh` asks for the root password once, and the connection
    is reused.
 3. Runs `install` on the server.
-4. Waits up to 90 seconds for `ops@web1` to answer over the tailnet, then checks
+4. If the upgrade left `/var/run/reboot-required`, reboots the server and waits
+   up to five minutes for root SSH to answer again. `ssh` asks for the root
+   password again.
+5. Waits up to 90 seconds for `ops@web1` to answer over the tailnet, then checks
    the server from outside.
-5. Runs `close-ssh` through that tailnet session, then checks that public SSH
+6. Runs `close-ssh` through that tailnet session, then checks that public SSH
    is closed.
 
 On a server that has just booted, `install` waits for the provider's first-boot
-setup to finish, which can take a few minutes. Nothing is wrong. See
-[How it works](./how-it-works.md) for the detail.
+setup to finish, then upgrades every package. Each can take a few minutes.
+Nothing is wrong. See [How it works](./how-it-works.md) for the detail.
 
-The checks in step 4 run before anything is closed. If one fails, `bin/provision`
-stops with public SSH still open. [How it works](./how-it-works.md) says what
-each step does on the server, and why in that order.
+The checks in step 5 run before anything is closed. If one fails,
+`bin/provision` stops with public SSH still open.
+[How it works](./how-it-works.md) says what each step does on the server, and
+why in that order.
 
 ## What it prints
 
 Each step logs a line that starts with `==>`. The checks print `PASS` or `FAIL`
-lines. A run with `--key` looks like this, abbreviated:
+lines. The `reboot` line appears only when the upgrade asks for a reboot. A run
+with `--key` looks like this, abbreviated:
 
 ```text
 ==> resolve the auth key
@@ -67,11 +72,14 @@ lines. A run with `--key` looks like this, abbreviated:
 ==> install_00_config
 ==> install_05_first_boot
 ==> waiting for the provider's first-boot setup to finish
+==> install_06_upgrade
+==> upgrading installed packages
 ==> install_10_user
 ==> install_20_tailscale
 ==> install_30_firewall
 ==> install_40_updates
 ==> install_90_next_steps
+==> reboot root@203.0.113.7
 ==> wait for ops@web1 on the tailnet
 ==> verify the tailnet path
 PASS tailnet ssh works (accept-new host key checking)
@@ -97,6 +105,7 @@ the [manual flow](./manual-setup.md). `bin/provision` does what it asks.
 | Error message | Public SSH | What to do |
 | ------------- | ---------- | ---------- |
 | `install failed` | open | Read the output above it. Fix the cause and run again. |
+| `did not answer root SSH after the reboot` | open | Check the server in the provider's panel. Then run again. |
 | `ops@web1 did not answer over the tailnet` | open | The message shows ssh's last error. See [Tailnet policy](./tailnet-policy.md). |
 | `verification failed` | open | The `FAIL` lines say which check. |
 | `close-ssh failed` | may be closed | Run `close-ssh` again, as [Manual setup](./manual-setup.md) shows. Repeating it is safe. |

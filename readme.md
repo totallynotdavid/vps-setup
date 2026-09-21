@@ -25,7 +25,9 @@ to open it. The last line of the output is the `ssh` command to use from now on.
   Tailscale SSH on.
 - Turns on the ufw firewall: everything incoming is denied except traffic on
   the tailnet interface.
-- Turns on unattended upgrades.
+- Upgrades the server once, keeps Tailscale updated through apt, and reboots at
+  04:00 when an update needs it. [Inputs](./docs/inputs.md) says how to turn the
+  reboot off.
 - Logs in as the admin user over the tailnet, and stops there if that fails.
 - Removes OpenSSH and locks the root password.
 
