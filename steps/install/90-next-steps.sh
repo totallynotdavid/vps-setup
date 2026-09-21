@@ -7,7 +7,8 @@ Next, from your own machine, verify Tailscale SSH works:
 
     ssh $ADMIN_USER@$TS_HOSTNAME
 
-Then run close-ssh inside that session, as the README describes. Public SSH
-stays open until you do.
+Then run close-ssh inside that session, as docs/manual-setup.md in
+https://github.com/totallynotdavid/vps-setup describes. Public SSH stays open
+until you do.
 EOF_MSG
 }

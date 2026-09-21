@@ -104,12 +104,14 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 wait_for_tailnet() {
-	local deadline=$((SECONDS + 90))
+	local deadline=$((SECONDS + 90)) err
 	# Only a reachability probe: verify.sh learns and checks the host key.
-	until ssh -n -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no \
-		-o UserKnownHostsFile=/dev/null -o LogLevel=ERROR "$admin@$name" true 2>/dev/null; do
-		((SECONDS < deadline)) ||
-			die "$admin@$name did not answer over the tailnet within 90 seconds; is this machine on the tailnet? Public SSH is still open"
+	until err=$(ssh -n -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no \
+		-o UserKnownHostsFile=/dev/null -o LogLevel=ERROR "$admin@$name" true 2>&1); do
+		((SECONDS < deadline)) || {
+			err=${err##*$'\n'}
+			die "$admin@$name did not answer over the tailnet within 90 seconds; ssh said: ${err:-nothing}"$'\n'"Tailscale SSH needs a grant and an ssh rule that both list this machine in src, and a tagged machine has no user identity, so its tag must be listed; see docs/tailnet-policy.md. Public SSH is still open"
+		}
 		sleep 3
 	done
 }
