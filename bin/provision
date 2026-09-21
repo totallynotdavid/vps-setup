@@ -75,7 +75,9 @@ tmp=$(mktemp -d)
 key_on_server=0
 # A reinstalled server keeps its IP and gets a new host key, so root's host key
 # lives in a private file that lasts one run and ~/.ssh/known_hosts is untouched.
-root_opts=(-o "ControlPath=$tmp/control" -o "UserKnownHostsFile=$tmp/known_hosts" -o StrictHostKeyChecking=accept-new)
+# The password goes first: six agent keys tried before it exhaust sshd's MaxAuthTries.
+root_opts=(-o "ControlPath=$tmp/control" -o "UserKnownHostsFile=$tmp/known_hosts" -o StrictHostKeyChecking=accept-new
+	-o "PreferredAuthentications=password,keyboard-interactive,publickey")
 
 root_ssh() {
 	ssh "${root_opts[@]}" -o ControlMaster=no "$target" "$@"

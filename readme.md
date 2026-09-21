@@ -13,9 +13,10 @@ git clone https://github.com/totallynotdavid/vps-setup && cd vps-setup
 bin/provision root@203.0.113.7 web1
 ```
 
-`root@203.0.113.7` is where to log in, and `web1` becomes the Tailscale node
-name. Tailscale prints a login URL and waits ten minutes for you to open it. The
-last line of the output is the `ssh` command to use from now on.
+`root@203.0.113.7` is where to log in, and it is a placeholder from a range
+reserved for documentation, so use your own server's address. `web1` becomes the
+Tailscale node name. Tailscale prints a login URL and waits ten minutes for you
+to open it. The last line of the output is the `ssh` command to use from now on.
 
 ## What it does
 

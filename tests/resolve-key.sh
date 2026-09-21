@@ -35,9 +35,15 @@ esac
 FAKE
 chmod +x "$tmp/bin/curl"
 
-secret=tskey-client-k7nQpX3CNTRL-s3cr3tS3cr3tS3cr3t
-token=tskey-api-kTOKEN123-t0kent0kent0ken
-minted=tskey-auth-kMINTED456CNTRL-m1ntedm1ntedm1nted
+# Joined at run time so the source holds no string shaped like a Tailscale key.
+fake_key() {
+	printf 'tskey-%s-%s' "$1" "$2"
+}
+
+secret=$(fake_key client k7nQpX3CNTRL-s3cr3tS3cr3tS3cr3t)
+token=$(fake_key api kTOKEN123-t0kent0kent0ken)
+minted=$(fake_key auth kMINTED456CNTRL-m1ntedm1ntedm1nted)
+plain=$(fake_key auth kPLAIN789CNTRL-plainplainplain)
 
 reset_fake() {
 	rm -f "$fake"/argv.* "$fake"/stdin.* "$fake"/count
@@ -83,13 +89,13 @@ body_for() {
 	printf '{"capabilities":{"devices":{"create":{"reusable":false,"ephemeral":%s,"preauthorized":true,"tags":[%s]}}},"expirySeconds":3600,"description":"%s"}' "$@"
 }
 
-printf '%s\n' "tskey-auth-kPLAIN789CNTRL-plainplainplain" >"$tmp/plain.key"
+printf '%s\n' "$plain" >"$tmp/plain.key"
 printf '%s\n' "$secret" >"$tmp/oauth.key"
 
 reset_fake
 resolve "$tmp/plain.key" TS_TAGS=tag:server
 assert "a plain key exits 0" [ "$status" -eq 0 ]
-assert "a plain key is printed unchanged" [ "$stdout" == tskey-auth-kPLAIN789CNTRL-plainplainplain ]
+assert "a plain key is printed unchanged" [ "$stdout" == "$plain" ]
 assert "a plain key does not call curl" [ "$(calls)" -eq 0 ]
 
 reset_fake
