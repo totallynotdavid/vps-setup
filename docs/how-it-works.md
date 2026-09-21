@@ -23,6 +23,14 @@ first failure stops the run.
 **00 config.** Every input is checked first, so a typo costs nothing and no
 half-configured server is left. See [Inputs](./inputs.md).
 
+**05 first boot.** A server that has just booted can still be running the
+provider's first-boot setup, whose package upgrade holds the apt locks for a
+few minutes. The step runs `cloud-init status --wait`, which returns when that
+setup is done, and gives up after ten minutes so a stuck provider cannot hang
+`install`. It ignores the exit status. The Contabo image ends every first boot
+with an error, because its own bootcmd fails, so the status says nothing about
+our install. Without cloud-init it does nothing.
+
 **10 user.** Tailscale SSH logs you in as a local account, so the admin user
 must exist, with sudo, before the node can be tested. The user has no password.
 `adduser` fails when a group named like the user already exists, and the 26.04
@@ -62,12 +70,12 @@ already in place.
 **90 next steps.** It prints the `ssh` command to try and says that public SSH
 stays open.
 
-Two helpers shape the output. `apt_get` waits up to ten minutes for the dpkg lock,
-which the provider's first-boot upgrade and `unattended-upgrades` can hold on a
-fresh server, runs without prompts, and lets `needrestart` restart services on
-its own. `quiet` runs a command and prints nothing on success, and everything
-the command wrote on failure. Only `tailscale up` streams, because it prints the
-login or approval prompt and then waits.
+Two helpers shape the output. `apt_get` waits up to ten minutes for the dpkg
+lock, which `unattended-upgrades` can hold, runs without prompts, and lets
+`needrestart` restart services on its own. `quiet` runs a command and prints
+nothing on success, and everything the command wrote on failure. Only
+`tailscale up` streams, because it prints the login or approval prompt and then
+waits.
 
 ## close-ssh
 

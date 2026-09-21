@@ -19,6 +19,7 @@ run = [
 	"terraform -chdir=tests/e2e/aws validate",
 	"tests/guards.sh",
 	"tests/os.sh",
+	"tests/first-boot.sh",
 	"tests/config.sh",
 	"tests/quiet.sh",
 	"tests/resolve-key.sh",
