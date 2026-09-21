@@ -6,9 +6,10 @@ behind a Cloudflare Tunnel. A server set up another way has neither the guard
 nor the results below.
 
 Everything here was run on an AWS Ubuntu server on 2026-09-21, after a full
-`install` and `close-ssh`. The versions are Dokploy 0.30.7, cloudflared 2026.9.1
-and the packages in Docker's repositories on that day. Dokploy's installer is a
-third-party script and will change.
+`install` and `close-ssh`. The install steps and the dashboard check also ran on
+a Contabo server with Ubuntu 26.04 on the same day. The versions are Dokploy
+0.30.7, cloudflared 2026.9.1 and the packages in Docker's repositories on that
+day. Dokploy's installer is a third-party script and will change.
 
 ## Order
 
@@ -52,6 +53,10 @@ sudo ADVERTISE_ADDR=<the server's own address> sh install.sh
 
 Dokploy, its Postgres and Traefik came up and survived a reboot.
 
+The installer's last line points at `http://<the server's address>:3000`. Behind
+the guard, that address does not answer from the internet. See
+[Open the dashboard](#open-the-dashboard).
+
 ## What the guard leaves open
 
 After the install, Docker publishes 80, 443 and 3000. From a
@@ -64,6 +69,26 @@ Both answered about 26 seconds after a reboot, with the ports still closed.
 
 A container on the `dokploy-network` overlay reached `dokploy-traefik:80` (404)
 and `dokploy:3000` (307).
+
+## Open the dashboard
+
+From another machine on the tailnet, open
+`http://<the server's tailnet name>:3000`. The tailnet policy must allow port
+3000. See [Tailnet policy](./tailnet-policy.md). On the Contabo server, a tailnet
+device got `307` on port 3000 and `404` on port 80.
+
+A new Dokploy redirects `/` to `/register`, and `/register` answered `200`.
+Register the first account before anyone else can reach the port. This page did
+not create an account, so what that account can do was not tried.
+
+Without a grant for port 3000, forward the port through Tailscale SSH:
+
+```sh
+ssh -L 3000:127.0.0.1:3000 ops@web1
+```
+
+Then open `http://127.0.0.1:3000`. On the Contabo server, that answered `307` to
+`/register`.
 
 ## Add a Cloudflare Tunnel
 
@@ -104,6 +129,3 @@ a port on purpose.
 - How long a provider's server takes to boot.
 - Certificates behind the tunnel. Traefik's Let's Encrypt HTTP-01 challenge
   cannot be answered through a tunnel. This is from reading, not tried.
-- Reaching the dashboard from another tailnet machine. See
-  [Docker on this server](./docker.md#reach-a-published-port) for the general
-  rule and [Tailnet policy](./tailnet-policy.md) for the policy.
