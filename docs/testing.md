@@ -13,8 +13,15 @@ and after to show the second run changed nothing, reboots, and checks the closed
 state once more.
 
 `tests/e2e/verify.sh installed|closed <tailnet-host> <admin-user> <public-ip>`
-checks a real server from your machine: `installed` has 8 checks and `closed`
-has 9. `bin/provision` uses it too.
+checks a real server from your machine. `bin/provision` uses it too. Both modes
+check that the tailnet login works and that ufw is active and denies incoming
+traffic. `installed` also checks that `sudo` works, that `unattended-upgrades`
+is active and allows the Tailscale origin, that the automatic-reboot setting
+matches `AUTO_REBOOT`, that Tailscale reports no health problem, that sshd is
+installed and that public port 22 accepts a connection. `closed` checks that
+`ssh.socket` and `ssh.service` are inactive, that sshd is absent, that nothing
+listens on port 22, that the root password is locked and that public port 22
+does not connect.
 
 `tests/e2e/refuse-close.sh <root@host> <name> --key FILE` installs as
 `bin/provision` does, then runs `close-ssh` over the root SSH session. It checks
@@ -83,13 +90,13 @@ All measured on 2026-09-20, on AWS EC2 in `us-east-1` with a `t3.micro`:
 
 | Release | Result of `mise run e2e:aws` |
 | ------- | ---------------------------- |
-| 20.04   | 30 PASS, 0 FAIL |
-| 22.04   | 30 PASS, 0 FAIL |
-| 24.04   | 30 PASS, 0 FAIL |
-| 26.04   | 30 PASS, 0 FAIL |
+| 20.04   | passed |
+| 22.04   | passed |
+| 24.04   | passed |
+| 26.04   | passed |
 
-`run` passes 26 checks: install 8, the first close 9, and after a reboot the
-closed state again 9. `refuse` passes 4. The first 24.04 run failed after
+`run` checks the installed state, the closed state, and the closed state again
+after a reboot. `refuse` checks the refusal. The first 24.04 run failed after
 `close-ssh`, because removing OpenSSH left `ssh.socket` and `ssh.service` active.
 [How it works](./how-it-works.md#close-ssh) says what step 30 does about that.
 

@@ -19,13 +19,13 @@ run_config() {
 	status=0
 	output=$(
 		exec 2>&1
-		unset ADMIN_USER TS_HOSTNAME TS_TAGS TS_AUTHKEY_FILE
+		unset ADMIN_USER TS_HOSTNAME TS_TAGS TS_AUTHKEY_FILE AUTO_REBOOT
 		for pair in "$@"; do
 			export "${pair?}"
 		done
 		install_00_config
-		printf 'ADMIN_USER=%s TS_HOSTNAME=%s TS_TAGS=%s TS_AUTHKEY_FILE=%s\n' \
-			"$ADMIN_USER" "$TS_HOSTNAME" "$TS_TAGS" "$TS_AUTHKEY_FILE"
+		printf 'ADMIN_USER=%s TS_HOSTNAME=%s TS_TAGS=%s TS_AUTHKEY_FILE=%s AUTO_REBOOT=%s\n' \
+			"$ADMIN_USER" "$TS_HOSTNAME" "$TS_TAGS" "$TS_AUTHKEY_FILE" "$AUTO_REBOOT"
 	) || status=$?
 }
 
@@ -63,11 +63,20 @@ expect_error() {
 }
 
 expect_ok "defaults with only TS_HOSTNAME set" \
-	"ADMIN_USER=admin TS_HOSTNAME=web1 TS_TAGS= TS_AUTHKEY_FILE=" \
+	"ADMIN_USER=admin TS_HOSTNAME=web1 TS_TAGS= TS_AUTHKEY_FILE= AUTO_REBOOT=04:00" \
 	TS_HOSTNAME=web1
 expect_ok "all inputs set" \
-	"ADMIN_USER=ops_1 TS_HOSTNAME=web-01 TS_TAGS=tag:a,tag:b-2 TS_AUTHKEY_FILE=$tmp/key" \
-	ADMIN_USER=ops_1 TS_HOSTNAME=web-01 TS_TAGS=tag:a,tag:b-2 "TS_AUTHKEY_FILE=$tmp/key"
+	"ADMIN_USER=ops_1 TS_HOSTNAME=web-01 TS_TAGS=tag:a,tag:b-2 TS_AUTHKEY_FILE=$tmp/key AUTO_REBOOT=23:59" \
+	ADMIN_USER=ops_1 TS_HOSTNAME=web-01 TS_TAGS=tag:a,tag:b-2 "TS_AUTHKEY_FILE=$tmp/key" AUTO_REBOOT=23:59
+expect_ok "AUTO_REBOOT empty falls back to the default" \
+	"ADMIN_USER=admin TS_HOSTNAME=web1 TS_TAGS= TS_AUTHKEY_FILE= AUTO_REBOOT=04:00" \
+	TS_HOSTNAME=web1 AUTO_REBOOT=
+expect_ok "AUTO_REBOOT at midnight" \
+	"ADMIN_USER=admin TS_HOSTNAME=web1 TS_TAGS= TS_AUTHKEY_FILE= AUTO_REBOOT=00:00" \
+	TS_HOSTNAME=web1 AUTO_REBOOT=00:00
+expect_ok "AUTO_REBOOT off" \
+	"ADMIN_USER=admin TS_HOSTNAME=web1 TS_TAGS= TS_AUTHKEY_FILE= AUTO_REBOOT=off" \
+	TS_HOSTNAME=web1 AUTO_REBOOT=off
 
 expect_error "ADMIN_USER with uppercase" "ADMIN_USER 'Admin' is invalid" ADMIN_USER=Admin
 expect_error "ADMIN_USER starting with a digit" "ADMIN_USER '1abc' is invalid" ADMIN_USER=1abc
@@ -89,5 +98,10 @@ expect_error "TS_AUTHKEY_FILE missing" "TS_AUTHKEY_FILE '$tmp/none' is not a rea
 	TS_HOSTNAME=web1 "TS_AUTHKEY_FILE=$tmp/none"
 expect_error "TS_AUTHKEY_FILE is a directory" "TS_AUTHKEY_FILE '$tmp' is not a readable regular file" \
 	TS_HOSTNAME=web1 "TS_AUTHKEY_FILE=$tmp"
+
+for bad in 4:00 24:00 04:60 ON 04:00:00 always; do
+	expect_error "AUTO_REBOOT $bad" "AUTO_REBOOT '$bad' is invalid; use a 24-hour time like 04:00, or off" \
+		TS_HOSTNAME=web1 "AUTO_REBOOT=$bad"
+done
 
 ((failures == 0))

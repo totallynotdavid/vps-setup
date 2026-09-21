@@ -10,6 +10,8 @@ environment for install:
   TS_HOSTNAME      Tailscale node name, required, e.g. web1
   TS_TAGS          comma-separated tags, e.g. tag:server (default: none)
   TS_AUTHKEY_FILE  file holding a Tailscale auth key (default: log in by URL)
+  AUTO_REBOOT      time of the automatic reboot after updates, HH:MM, or off
+                   (default: 04:00)
 EOF_USAGE
 }
 

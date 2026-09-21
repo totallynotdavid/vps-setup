@@ -3,11 +3,13 @@ install_00_config() {
 	TS_HOSTNAME=${TS_HOSTNAME:-}
 	TS_TAGS=${TS_TAGS:-}
 	TS_AUTHKEY_FILE=${TS_AUTHKEY_FILE:-}
+	AUTO_REBOOT=${AUTO_REBOOT:-04:00}
 
 	config_check_admin_user
 	config_check_hostname
 	config_check_tags
 	config_check_authkey_file
+	config_check_auto_reboot
 }
 
 config_check_admin_user() {
@@ -32,4 +34,10 @@ config_check_tags() {
 config_check_authkey_file() {
 	[[ -z $TS_AUTHKEY_FILE || (-f $TS_AUTHKEY_FILE && -r $TS_AUTHKEY_FILE) ]] ||
 		die "TS_AUTHKEY_FILE '$TS_AUTHKEY_FILE' is not a readable regular file"
+}
+
+config_check_auto_reboot() {
+	local re='^([01][0-9]|2[0-3]):[0-5][0-9]$'
+	[[ $AUTO_REBOOT == off || $AUTO_REBOOT =~ $re ]] ||
+		die "AUTO_REBOOT '$AUTO_REBOOT' is invalid; use a 24-hour time like 04:00, or off"
 }

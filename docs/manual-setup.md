@@ -28,7 +28,10 @@ does the same without the checksum. A truncated download runs nothing, because
 the script's last line is the call that starts it.
 
 `install` ends by telling you the `ssh` command to try next, and that public SSH
-stays open until you close it.
+stays open until you close it. If it also says the server needs a reboot, run
+`reboot` as root and wait until the server is back before you go on. The reboot
+comes before `close-ssh`, so a server that does not return on the tailnet still
+has root SSH.
 
 ## 2. Verify
 

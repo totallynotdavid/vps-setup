@@ -12,9 +12,14 @@ the variable.
 | `TS_HOSTNAME`     | required | one DNS label: `a-z`, `0-9` and `-`, 1 to 63 characters, not starting or ending with `-` |
 | `TS_TAGS`         | none     | comma-separated tags, each matching `tag:[a-z0-9-]+`     |
 | `TS_AUTHKEY_FILE` | none     | a readable regular file. Its content is not checked      |
+| `AUTO_REBOOT`     | `04:00`  | a 24-hour `HH:MM`, from `00:00` to `23:59`, or `off`     |
 
 `TS_HOSTNAME` has no default, because a provider's host name would land on your
 tailnet.
+
+`AUTO_REBOOT` is the time, on the server's clock, at which
+`unattended-upgrades` reboots the server after an update that needs it. See
+[How it works](./how-it-works.md#install) for what it writes.
 
 `install.sh` takes exactly one argument: `install` or `close-ssh`. `-h` and
 `--help` print the usage and exit 0. Any other call prints the usage and exits 2.
@@ -37,6 +42,7 @@ bin/provision [--key FILE] <root@host> <name>
 | `--key FILE` | an auth key, or an OAuth client secret. See [Auth key](./auth-key.md). The file must exist |
 | `ADMIN_USER` | passed on to `install`. Default `admin` |
 | `TS_TAGS` | passed on to `install`. Required with an OAuth client secret |
+| `AUTO_REBOOT` | passed on to `install` when set. Default `04:00` |
 | `TS_EPHEMERAL` | `1` makes a key minted from an OAuth client secret ephemeral. Default: not ephemeral |
 | `-h`, `--help` | print the usage and exit 0 |
 

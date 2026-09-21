@@ -45,7 +45,7 @@ target=${args[0]} name=${args[1]}
 admin=${ADMIN_USER:-admin}
 public_ip=${target#*@}
 known_hosts=$(e2e_known_hosts "$name")
-remote_env=$(printf 'ADMIN_USER=%q TS_HOSTNAME=%q TS_TAGS=%q' "$admin" "$name" "${TS_TAGS:-}")
+remote_env=$(printf 'ADMIN_USER=%q TS_HOSTNAME=%q TS_TAGS=%q AUTO_REBOOT=%q' "$admin" "$name" "${TS_TAGS:-}" "${AUTO_REBOOT:-}")
 
 tailnet_ssh() {
 	ssh -o BatchMode=yes -o ConnectTimeout=15 -o StrictHostKeyChecking=yes \
@@ -56,7 +56,7 @@ tailnet_ssh() {
 IFS= read -r -d '' remote_state <<'REMOTE' || true
 sudo -n ufw status verbose
 sudo -n passwd -S root
-sudo -n sh -c 'sha256sum /etc/sudoers.d/* /etc/apt/apt.conf.d/20auto-upgrades'
+sudo -n sh -c 'sha256sum /etc/sudoers.d/* /etc/apt/apt.conf.d/20auto-upgrades /etc/apt/apt.conf.d/52vps-setup'
 [ -x /usr/sbin/sshd ] && echo "sshd installed" || echo "sshd absent"
 tailscale ip -4
 dpkg-query -W | sha256sum

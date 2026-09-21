@@ -7,6 +7,7 @@ cutting you off. Every ordering rule below follows from that.
 
 ```text
 install     on the server, over root SSH: prepare it, leave public SSH open
+reboot      only if the upgrade asks for it: wait for root SSH to answer again
 verify      from your machine: log in over the tailnet
 close-ssh   on the server, inside that tailnet session: remove public SSH
 verify      from your machine: public SSH is gone, the tailnet still works
@@ -30,6 +31,19 @@ setup is done, and gives up after ten minutes so a stuck provider cannot hang
 `install`. It ignores the exit status. The Contabo image ends every first boot
 with an error, because its own bootcmd fails, so the status says nothing about
 our install. Without cloud-init it does nothing.
+
+**06 upgrade.** An image ships with updates pending, some of them security
+fixes. The step runs `apt-get update` and `apt-get full-upgrade`, so the server
+is current before Tailscale joins and the firewall goes up. A failure stops
+`install`. Kernel and libc updates create `/var/run/reboot-required`, which step
+90 and `bin/provision` act on. A run cut off during the upgrade leaves dpkg
+unfinished, and the step runs `dpkg --configure -a` first, so the next run
+repairs it.
+
+Only the first run upgrades. When Tailscale is already installed, the step logs
+one line and does nothing, because upgrading can restart `tailscaled`, which
+ends the Tailscale SSH session that runs the script. `unattended-upgrades`
+keeps the server current from then on.
 
 **10 user.** Tailscale SSH logs you in as a local account, so the admin user
 must exist, with sudo, before the node can be tested. The user has no password.
@@ -63,17 +77,38 @@ a default-deny with no allow behind it.
 
 **40 updates.** It installs `unattended-upgrades`, writes
 `/etc/apt/apt.conf.d/20auto-upgrades` to turn on the package-list update and the
-upgrade, and enables the service. It is last because it is hygiene, not part of
-the way in. A failure here stops `install` after everything the way in needs is
-already in place.
+upgrade, writes `/etc/apt/apt.conf.d/52vps-setup`, and enables the service. It
+is last because it is hygiene, not part of the way in. A failure here stops
+`install` after everything the way in needs is already in place.
+
+`52vps-setup` sorts after `50unattended-upgrades`, so its lists add to the stock
+ones. It does two things:
+
+- The stock origins are Ubuntu and ESM, so the service never updates Tailscale,
+  and Tailscale's own updater is unreliable on Ubuntu
+  ([tailscale#17753](https://github.com/tailscale/tailscale/issues/17753),
+  [#10400](https://github.com/tailscale/tailscale/issues/10400)). The file adds
+  `origin=Tailscale,label=Tailscale` to `Unattended-Upgrade::Origins-Pattern`,
+  the Origin and Label in the Tailscale repository's Release file. No other
+  origin is added.
+- It sets the reboot policy from `AUTO_REBOOT`. By default the server reboots at
+  04:00, with users logged in, when an update needs it. The kernel is the
+  isolation boundary for containers, and nobody logs in to notice
+  `/var/run/reboot-required`. `off` turns the reboot off. See
+  [Inputs](./inputs.md).
+
+The file is the same on every run, so a second `install` changes nothing.
 
 **90 next steps.** It prints the `ssh` command to try and says that public SSH
-stays open.
+stays open. When `/var/run/reboot-required` exists, it also says to run `reboot`
+before `close-ssh`.
 
 Two helpers shape the output. `apt_get` waits up to ten minutes for the dpkg
-lock, which `unattended-upgrades` can hold, runs without prompts, and lets
-`needrestart` restart services on its own. `quiet` runs a command and prints
-nothing on success, and everything the command wrote on failure. Only
+lock, which `unattended-upgrades` can hold, runs without prompts, keeps the
+existing file when a package asks about a changed config file, reads no stdin,
+and lets `needrestart` restart services on its own. The script arrives on the
+remote shell's stdin, so nothing apt starts may read it. `quiet` runs a command
+and prints nothing on success, and everything the command wrote on failure. Only
 `tailscale up` streams, because it prints the login or approval prompt and then
 waits.
 
@@ -136,9 +171,23 @@ so a Tailscale problem shows up while public SSH still exists. It runs
 `close-ssh` through that same tailnet session, which is the one place the
 session check accepts.
 
+**Reboot before close.** After `install`, `bin/provision` checks the server for
+`/var/run/reboot-required`. If it exists, `bin/provision` notes
+`/proc/sys/kernel/random/boot_id`, runs `systemctl reboot`, and waits up to five
+minutes for root SSH to answer with a different boot id. The tailnet wait and
+verify come next. This proves that the new kernel boots and that the server
+returns on the tailnet while root SSH still works, before anything is closed. If
+root SSH does not return, the run stops with public SSH open. The reboot ends
+the reused root connection, so the wait opens new ones.
+
 **The key is deleted.** An auth key is one-use, so a leftover file is a secret
 with no purpose. `bin/provision` deletes it from the server as soon as `install`
 is done, and on any exit. See [Auth key](./auth-key.md).
+
+**A dead connection fails fast.** The root connection sends a keepalive every 15
+seconds and gives up after four unanswered ones, so a dead network path stops
+the run in about a minute, with public SSH still open, instead of hanging until
+TCP gives up.
 
 **Root's host key is private to the run.** A reinstalled server keeps its address
 and gets a new host key, so the root host key goes in a temporary file that lasts
