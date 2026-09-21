@@ -55,6 +55,9 @@ the same rule after `delete`:
 sudo ufw route delete allow proto tcp from any to any port 80
 ```
 
+A Cloudflare Tunnel opens no inbound port. See
+[Dokploy behind a Cloudflare Tunnel](./dokploy.md).
+
 ## A bridge with its own name
 
 The guard trusts Docker's bridge names. A bridge with any other name is
