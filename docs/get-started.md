@@ -19,7 +19,9 @@ git clone https://github.com/totallynotdavid/vps-setup && cd vps-setup
 ADMIN_USER=ops TS_TAGS=tag:server bin/provision --key ./oauth.key root@203.0.113.7 web1
 ```
 
-`root@203.0.113.7` is where to log in. `web1` becomes the Tailscale node name.
+`root@203.0.113.7` is where to log in. That address is a placeholder from a
+range reserved for documentation, so use your own server's address. `web1`
+becomes the Tailscale node name.
 `ADMIN_USER` and `TS_TAGS` are optional, and `ADMIN_USER` defaults to `admin`.
 [Inputs](./inputs.md) lists every variable.
 
