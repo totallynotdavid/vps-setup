@@ -60,12 +60,12 @@ already in place.
 **90 next steps.** It prints the `ssh` command to try and says that public SSH
 stays open.
 
-Two helpers shape the output. `apt_get` waits up to two minutes for the dpkg lock,
-which `unattended-upgrades` can hold on a fresh server, runs without prompts, and
-lets `needrestart` restart services on its own. `quiet` runs a command and
-prints nothing on success, and everything the command wrote on failure. Only
-`tailscale up` streams, because it prints the login or approval prompt and then
-waits.
+Two helpers shape the output. `apt_get` waits up to ten minutes for the dpkg lock,
+which the provider's first-boot upgrade and `unattended-upgrades` can hold on a
+fresh server, runs without prompts, and lets `needrestart` restart services on
+its own. `quiet` runs a command and prints nothing on success, and everything
+the command wrote on failure. Only `tailscale up` streams, because it prints the
+login or approval prompt and then waits.
 
 ## close-ssh
 
