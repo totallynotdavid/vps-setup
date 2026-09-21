@@ -30,9 +30,11 @@ release.
 
 ## Tested build, published asset
 
-`bin/provision` builds `dist/install.sh` from the working tree, so
-`mise run e2e:aws` from the commit you are about to tag tests the script the tag
-will publish. See [Testing](./testing.md).
+The release gate is `mise run e2e:aws:releases`: the AWS end-to-end must pass on
+every release `supported_os` lists. Then do a run on a real provider server.
+`bin/provision` builds `dist/install.sh` from the working tree, so running them
+from the commit you are about to tag tests the script the tag will publish. See
+[Testing](./testing.md).
 
 Two builds of one tree are byte-identical. `build` fixes the sort order of the
 fragments with `LC_ALL=C` and writes nothing that depends on the time or the

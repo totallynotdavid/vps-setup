@@ -1,8 +1,8 @@
 # vps-setup
 
-vps-setup turns a fresh Ubuntu 26.04 VPS that offers only root and a password
+vps-setup turns a fresh Ubuntu VPS that offers only root and a password
 into a server reachable only through [Tailscale SSH](https://tailscale.com/kb/1193/tailscale-ssh).
-It supports Ubuntu 26.04 and nothing else. Public SSH stays open while it
+It supports Ubuntu 20.04, 22.04, 24.04 and 26.04 and nothing else. Public SSH stays open while it
 installs, and closes only after your own machine has logged in over the tailnet.
 
 Clone the repository, then run `bin/provision` from a machine on the same
@@ -33,7 +33,7 @@ Every step converges, so running it again is safe.
 
 ## Where it stops
 
-There is no other OS release, no other way in than Tailscale SSH, no sshd
+There is no other Ubuntu release, no other way in than Tailscale SSH, no sshd
 hardening, no fail2ban and no way back in through public SSH once it is closed.
 If Tailscale SSH stops working, you reinstall the server from the provider's
 panel. [Design boundaries](./docs/design-boundaries.md) gives the reason for

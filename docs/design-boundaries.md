@@ -6,11 +6,13 @@ rest is scope it has not grown into yet.
 
 ## By design, not planned
 
-- **Only Ubuntu 26.04.** `install` and `close-ssh` refuse any other release
-  before they change anything. The steps were worked out on real 26.04 servers,
-  where a release-specific detail decided the outcome: the `admin` group that
-  the image ships, `sudo-rs`, and the order in which sshd reads its drop-ins. A
-  release that has not been run on is refused, not guessed at.
+- **Only releases it has been run on.** `install` and `close-ssh` refuse any
+  other release before they change anything. The steps were worked out on real
+  servers, where a release-specific detail decided the outcome: on 26.04 the
+  `admin` group that the image ships and `sudo-rs`, on 24.04 that removing
+  OpenSSH leaves its units running, and the order in which sshd reads its
+  drop-ins. A release that has not been run on is refused, not guessed at.
+  `supported_os` in `lib/os.sh` lists them.
 - **Only Tailscale SSH as the way in.** `close-ssh` removes OpenSSH. There is no
   option to keep it, to move it to another port or to allow a second path.
 - **No sshd configuration.** Root and its password over public SSH is the
@@ -42,7 +44,9 @@ rest is scope it has not grown into yet.
 
 These are gaps, not commitments to never build them.
 
-- **Other Ubuntu releases.** 24.04 is the next release to run on and add.
+- **Other Ubuntu releases.** A new release needs a run of both AWS scenarios on
+  it, then an entry in `supported_os` in `lib/os.sh`. See
+  [Testing](./testing.md).
 - **Other providers.** The steps have been run on a Contabo server and on AWS EC2
   servers that start the same way, with root and a password over SSH. Provider
   images that change users, SSH or the firewall through cloud-init user data

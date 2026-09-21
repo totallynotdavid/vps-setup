@@ -2,8 +2,13 @@
 
 ## Requirements
 
-- A server running Ubuntu 26.04, and root access to it over SSH. Other releases
-  are refused before anything changes.
+- A server running Ubuntu 20.04, 22.04, 24.04 or 26.04, and root access to it
+  over SSH. Other releases are refused before anything changes.
+  [Ubuntu 20.04 is past standard support](https://ubuntu.com/about/release-cycle):
+  Canonical's release-cycle page lists its standard security maintenance as
+  ended in May 2025 and covered by Ubuntu Pro since. The `unattended-upgrades`
+  step installs and enables the service on 20.04 as on any release, but
+  vps-setup does not attach Ubuntu Pro. That is yours to do.
 - A Linux machine on the same tailnet, with `bash`, OpenSSH and `curl`. `curl`
   is used only to mint a key from an OAuth client, see [Auth key](./auth-key.md).
 - A tailnet policy that lets that machine SSH to the server as the admin user.

@@ -53,11 +53,17 @@ This has three consequences:
 - The OS check comes before the root check, so a wrong system is refused for
   the right reason whoever runs it.
 
+The OS gate is `require_supported_os` in `lib/os.sh`. `supported_os` there is the
+one list of releases, a function that prints one per line, because fragments
+hold only definitions. `tests/os.sh` tests the gate with os-release fields it
+supplies, so it does not depend on the host, and `tests/e2e/aws.sh releases`
+reads the same list.
+
 ## Tests
 
-`tests/guards.sh`, `tests/config.sh`, `tests/quiet.sh` and `tests/resolve-key.sh`
-run anywhere and need no root. `guards.sh` runs the generated script. `config.sh`
-and `quiet.sh` source the fragments. `resolve-key.sh` puts a fake `curl` first on
+`tests/guards.sh`, `tests/os.sh`, `tests/config.sh`, `tests/quiet.sh` and
+`tests/resolve-key.sh` run anywhere and need no root. `guards.sh` runs the
+generated script. `os.sh`, `config.sh` and `quiet.sh` source the fragments. `resolve-key.sh` puts a fake `curl` first on
 `PATH`. `tests/e2e/` needs a real server, and [Testing](./docs/testing.md)
 describes it.
 

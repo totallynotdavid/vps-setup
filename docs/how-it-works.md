@@ -25,11 +25,11 @@ half-configured server is left. See [Inputs](./inputs.md).
 
 **10 user.** Tailscale SSH logs you in as a local account, so the admin user
 must exist, with sudo, before the node can be tested. The user has no password.
-`adduser` fails when a group named like the user already exists, and Ubuntu 26.04
-images ship an `admin` group, so the user joins an existing group of that name.
+`adduser` fails when a group named like the user already exists, and the 26.04
+image ships an `admin` group, so the user joins an existing group of that name.
 The sudoers entry is `NOPASSWD:ALL`, written to `/etc/sudoers.d/$ADMIN_USER`. It
 is checked with `visudo -cf` on a temporary copy first, because a broken file in
-that directory can disable sudo for everyone. Ubuntu 26.04 uses `sudo-rs`, and
+that directory can disable sudo for everyone. On 26.04, `sudo` is `sudo-rs`, and
 `visudo -cf` parses this file with it.
 
 **20 tailscale.** The apt repository is added, and `apt-get update` run once,
@@ -82,7 +82,12 @@ at. The end-to-end harness checks the refusal over a root OpenSSH session.
 removed. Deleting a rule that is absent does not fail, which makes a repeat run
 harmless.
 
-**30 openssh.** It runs `apt-get remove` on `openssh-server` and
+**30 openssh.** It first runs `systemctl disable --now` on `ssh.socket` and then
+on `ssh.service`, for each of them that exists. On 24.04, removing
+`openssh-server` did not stop its units: after `close-ssh`, both were still
+active and something still listened on port 22, although the package was gone
+and the ufw rule deleted. The socket goes first so that it cannot start the
+service again. Then it runs `apt-get remove` on `openssh-server` and
 `openssh-sftp-server`. It removes and never purges. Tailscale SSH serves the host
 keys in `/etc/ssh/ssh_host_*`. Purging deletes them, the host key changes, and
 every client prints "REMOTE HOST IDENTIFICATION HAS CHANGED". Removing keeps
