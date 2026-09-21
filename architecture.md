@@ -10,8 +10,9 @@ the server, and why in that order.
 build            concatenates the fragments into dist/install.sh and writes
                  dist/install.sh.sha256
 lib/             helpers and the dispatcher: apt, dispatch, log, os, quiet, root, sshd
-steps/install/   the install phase, one file per step: 00-config, 10-user,
-                 20-tailscale, 30-firewall, 40-updates, 90-next-steps
+steps/install/   the install phase, one file per step: 00-config,
+                 05-first-boot, 10-user, 20-tailscale, 30-firewall, 40-updates,
+                 90-next-steps
 steps/close-ssh/ the close-ssh phase: 10-session, 20-firewall, 30-openssh, 40-root
 bin/             provision, resolve-key and release, which run on your machine
 tests/           unit tests that run anywhere, and tests/e2e for real servers

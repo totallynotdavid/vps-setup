@@ -45,8 +45,8 @@ you to open it. With `--key`, the run needs no browser. See
 5. Runs `close-ssh` through that tailnet session, then checks that public SSH
    is closed.
 
-On a server that has just booted, `install` can pause for a few minutes while
-the provider's own upgrade finishes. Nothing is wrong. See
+On a server that has just booted, `install` waits for the provider's first-boot
+setup to finish, which can take a few minutes. Nothing is wrong. See
 [How it works](./how-it-works.md) for the detail.
 
 The checks in step 4 run before anything is closed. If one fails, `bin/provision`
@@ -65,6 +65,8 @@ lines. A run with `--key` looks like this, abbreviated:
 ==> copy the auth key
 ==> install
 ==> install_00_config
+==> install_05_first_boot
+==> waiting for the provider's first-boot setup to finish
 ==> install_10_user
 ==> install_20_tailscale
 ==> install_30_firewall
