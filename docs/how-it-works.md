@@ -46,10 +46,12 @@ Only a node that has joined gets locked down.
 
 **30 firewall.** ufw denies incoming, allows outgoing, allows everything on
 `tailscale0`, and rate-limits the sshd port while sshd is installed. The port
-comes from `sshd -T`, not from an assumption of 22. With sshd absent there is no
-SSH rule, which is why running `install` again after `close-ssh` changes
-nothing. `ufw --force enable` comes last, so the root session that is running
-the script is never dropped by a default-deny with no allow behind it.
+comes from `sshd -T`, not from an assumption of 22. `sshd -T` refuses to run
+without `/run/sshd`, and a stopped `ssh.service` leaves none behind, so the
+script creates it first. With sshd absent there is no SSH rule, which is why
+running `install` again after `close-ssh` changes nothing. `ufw --force enable`
+comes last, so the root session that is running the script is never dropped by
+a default-deny with no allow behind it.
 
 **40 updates.** It installs `unattended-upgrades`, writes
 `/etc/apt/apt.conf.d/20auto-upgrades` to turn on the package-list update and the
