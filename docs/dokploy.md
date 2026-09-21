@@ -298,6 +298,109 @@ Twelve requests from outside all got the same answer as before, and the old
 server's access log saw none of them. The status and the body matched what the
 old server gave.
 
+### Move a compose application
+
+A compose application that builds from a repository has nothing to build from
+once the repository is gone. Set its source to `raw`, paste the compose file as
+it was at the deployed commit, and replace each `build:` with an `image:` from
+the loopback registry. Volumes and host paths do not come across, so copy them
+after a clean stop:
+
+```sh
+docker run --rm -v vol:/v:ro alpine tar cf - -C /v . \
+  | ssh web2 'docker run --rm -i -v vol:/v alpine tar xf - --numeric-owner -C /v'
+```
+
+For a host path, mount the path in the first container and extract with
+`sudo tar xf - --numeric-owner -p -C <path>` on the new server. Compose used
+volumes that were created ahead of it and printed only a warning that it had not
+created them. Row counts matched on three databases.
+
+### Deploy a file mount
+
+A Dokploy file mount is a database row that holds the content. Its file,
+`/etc/dokploy/applications/<app name>/files`, was not on the new server after
+the restore, and the service was rejected with
+`bind source path does not exist`. Calling `mounts.update` with the same content
+wrote nothing, because the row has no `filePath`. Copying the file from the old
+server fixed it, and the two files had the same sha256.
+
+### Move a database with its roles
+
+`pg_dump` dumps one database. The roles of the cluster and the grants on its
+tables are not part of it, and restoring with `--no-privileges` drops the
+grants. A client that logged in as its own role got `role "..." does not exist`.
+Dump the roles on the old server and apply them on the new one. An "already
+exists" for the superuser is expected. Then restore only the ACL entries of the
+dump:
+
+```sh
+pg_dumpall --globals-only > globals.sql
+pg_restore -l dump | grep -E ' (DEFAULT )?ACL ' > acl.list
+pg_restore -L acl.list --no-owner -d <database> dump
+```
+
+The image reads `POSTGRES_PASSWORD` only when it initializes a cluster. The
+application's password differed from the compose environment, so the new cluster
+refused it with `password authentication failed`. `ALTER ROLE ... PASSWORD`
+fixed it. The grants matched the old server after this: the ACL of every table
+and function hashed to the same value, and
+`information_schema.role_table_grants` had the same 18 rows. Run
+`vacuumdb --analyze-only` after a restore, because a restore leaves no
+statistics. A 731 MB dump of a 4.3 GB database restored with `pg_restore -j 4`
+in 289 seconds with no errors.
+
+### Move a Tailscale Service host
+
+The database was served to other servers through a Tailscale Service. A sidecar
+container that shares the Postgres container's network namespace advertised it.
+Its node identity is in its state volume. Stop the old sidecar, copy the volume,
+and start the new sidecar with it. It came up under the same tailnet name and
+address. `tailscale serve status` showed the Service, and a TCP connect to the
+Service worked from the new server, the old one and a third server. The auth key
+in the environment was not used. Never let two hosts advertise the Service at
+once.
+
+A host that connects to a Service hosted by a sidecar on the same machine goes
+round through the tailnet. The connect took 157 ms. Point applications on that
+machine at the local container's name instead.
+
+### Names on a shared network
+
+A container on a private network and on `dokploy-network` resolves a name in
+either. On the new server the name `postgres` resolved to the database of
+another application on `dokploy-network`, not to the application's own. That
+database logged about 1,000 `sorry, too many clients already` and 283
+`canceling authentication due to timeout` in five minutes. The application's own
+database logged nothing. Use the container's full name, such as
+`<project>-postgres-1`, in the connection string.
+
+A container on the default bridge could not resolve tailnet names. A container
+on `dokploy-network` could, and it also resolved another container by its name.
+
+### After a reboot
+
+The sidecars did not come back after `systemctl reboot`. Docker had tried to
+start each one before the container whose network it joins was running, and it
+did not retry: `cannot join network namespace of a non running container`. The
+restart count was 0. A script that runs `docker start` on each sidecar that is
+not running, from cron at `@reboot` and every five minutes, brought them back.
+Everything else came back by itself: SSH after 65 seconds, and every Swarm
+service and every compose container with a restart policy.
+
+### Copy speed
+
+The tailnet copy was limited by `tailscaled`, which used 100% of one core on the
+receiving server. `ssh` reached about 15 MB/s. Four parallel streams and plain
+TCP both totalled 10 to 14 MB/s. A 40 GB SQLite file that had not changed for
+five weeks went over in 1 GiB chunks, four at a time, with
+`dd skip=N | zstd -1 | ssh | zstd -d | dd seek=N conv=notrunc` into a file
+created with `truncate` at its final size. `zstd -1` compressed a slice of it
+2.55 to 1. The sha256 of the copy equalled the source's. 683,417 small files
+took 47 minutes. A `docker run` client that was killed left its container
+running. Its `tar` wrote the whole stream into the container's log and filled
+the disk. Check with `docker ps` after you stop a copy.
+
 ## Not covered
 
 - cloudflared as a systemd service on the host after a reboot.
