@@ -31,8 +31,8 @@ mise run check   # everything below; required before submitting a change
 - `terraform fmt -check`, `init` and `validate` for the module in
   `tests/e2e/aws`, so a broken module fails without AWS credentials;
 - `tests/guards.sh`, `tests/os.sh`, `tests/first-boot.sh`, `tests/upgrade.sh`,
-  `tests/config.sh`, `tests/updates.sh`, `tests/quiet.sh` and
-  `tests/resolve-key.sh`.
+  `tests/docker-guard.sh`, `tests/config.sh`, `tests/updates.sh`,
+  `tests/quiet.sh` and `tests/resolve-key.sh`.
 
 CI runs the same task on every push and pull request. The end-to-end run needs a
 real server and is not part of it. See [docs/testing.md](./docs/testing.md).
@@ -45,7 +45,10 @@ real server and is not part of it. See [docs/testing.md](./docs/testing.md).
 - `tests/os.sh`: the OS gate, with os-release fields the test supplies, so it
   gives the same result on any host.
 - `tests/first-boot.sh`: the first-boot wait, against a fake `cloud-init`.
-- `tests/upgrade.sh`: the upgrade step, against fake `tailscale` and `apt-get`.
+- `tests/upgrade.sh`: the upgrade step, against fake `tailscale`, `dpkg` and
+  `apt-get`.
+- `tests/docker-guard.sh`: the docker guard step, on temporary files, against
+  fake `ufw`, `iptables` and `ip6tables`.
 - `tests/config.sh`: input validation, against the source fragments.
 - `tests/updates.sh`: the `unattended-upgrades` policy that step 40 writes.
 - `tests/quiet.sh`: the `quiet` helper.

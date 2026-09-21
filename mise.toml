@@ -21,6 +21,7 @@ run = [
 	"tests/os.sh",
 	"tests/first-boot.sh",
 	"tests/upgrade.sh",
+	"tests/docker-guard.sh",
 	"tests/config.sh",
 	"tests/updates.sh",
 	"tests/quiet.sh",
@@ -28,8 +29,12 @@ run = [
 ]
 
 [tasks."e2e:aws"]
-description = "Create an EC2 server, run both end-to-end scenarios against it and destroy it"
+description = "Run every end-to-end scenario, each on its own new EC2 server, and destroy the server"
 run = "tests/e2e/aws.sh all"
+
+[tasks."e2e:aws:docker"]
+description = "Run the Docker scenario on a new EC2 server and destroy the server"
+run = "tests/e2e/aws.sh all docker"
 
 [tasks."e2e:aws:releases"]
 description = "Run the end-to-end on every supported Ubuntu release, one after another, and report each"

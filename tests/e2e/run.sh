@@ -56,7 +56,7 @@ tailnet_ssh() {
 IFS= read -r -d '' remote_state <<'REMOTE' || true
 sudo -n ufw status verbose
 sudo -n passwd -S root
-sudo -n sh -c 'sha256sum /etc/sudoers.d/* /etc/apt/apt.conf.d/20auto-upgrades /etc/apt/apt.conf.d/52vps-setup'
+sudo -n sh -c 'sha256sum /etc/sudoers.d/* /etc/apt/apt.conf.d/20auto-upgrades /etc/apt/apt.conf.d/52vps-setup /etc/ufw/after.rules /etc/ufw/after6.rules'
 [ -x /usr/sbin/sshd ] && echo "sshd installed" || echo "sshd absent"
 tailscale ip -4
 dpkg-query -W | sha256sum

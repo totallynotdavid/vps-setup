@@ -10,33 +10,49 @@ The end-to-end harness does that, so it is not part of `check`.
 freshly reinstalled server. It calls `bin/provision`, runs `install` and
 `close-ssh` again through the tailnet session, compares the server's state before
 and after to show the second run changed nothing, reboots, and checks the closed
-state once more.
+state once more. The state includes `/etc/ufw/after.rules` and
+`/etc/ufw/after6.rules`, so it checks that the docker guard is written once.
 
 `tests/e2e/verify.sh installed|closed <tailnet-host> <admin-user> <public-ip>`
 checks a real server from your machine. `bin/provision` uses it too. Both modes
 check that the tailnet login works and that ufw is active and denies incoming
-traffic. `installed` also checks that `sudo` works, that `unattended-upgrades`
-is active and allows the Tailscale origin, that the automatic-reboot setting
-matches `AUTO_REBOOT`, that Tailscale reports no health problem, that sshd is
-installed and that public port 22 accepts a connection. `closed` checks that
-`ssh.socket` and `ssh.service` are inactive, that sshd is absent, that nothing
-listens on port 22, that the root password is locked and that public port 22
-does not connect.
+traffic and that `DOCKER-USER` holds the rule that drops new connections, for
+`iptables` and `ip6tables`. `installed` also checks that `sudo` works, that
+`unattended-upgrades` is active and allows the Tailscale origin, that the
+automatic-reboot setting matches `AUTO_REBOOT`, that Tailscale reports no health
+problem, that sshd is installed and that public port 22 accepts a connection.
+`closed` checks that `ssh.socket` and `ssh.service` are inactive, that sshd is
+absent, that nothing listens on port 22, that the root password is locked and
+that public port 22 does not connect.
 
 `tests/e2e/refuse-close.sh <root@host> <name> --key FILE` installs as
 `bin/provision` does, then runs `close-ssh` over the root SSH session. It checks
 that `close-ssh` is refused, and that sshd stays installed and root stays
 unlocked.
 
+`tests/e2e/docker.sh <root@host> <name> --key FILE` provisions as `run.sh` does,
+then installs Docker on the server and publishes nginx three ways: `docker run
+-p`, a Swarm ingress service and a Swarm `mode=host` service. A network
+namespace on a veth pair stands in for a public interface. The script checks
+that a client in the namespace times out on all three ports while `127.0.0.1`
+answers. As a control it then empties `DOCKER-USER` and checks that the same
+client reaches all three, so the timeouts are the guard's doing, and `ufw reload`
+fills the chain again. It checks that a container still reaches the internet,
+that `ufw route allow` opens a port and deleting the rule closes it again (the
+container's port for the `docker run -p` and host-mode services, the published
+port for the ingress one), and that the ports stay closed after `ufw reload`,
+`systemctl restart docker` and a reboot. It checks the `docker run -p` port over
+IPv6 too. It ends with `verify.sh closed`.
+
 ## On AWS
 
 `mise run e2e:aws` makes the servers on AWS EC2. It starts a fresh Ubuntu
 instance that looks like a Contabo one (26.04 unless `UBUNTU_VERSION` says
-otherwise), with root login by password over SSH,
-runs `run.sh` against it, then does the same for `refuse-close.sh`. Each
-scenario gets its own instance, because `provision` closes SSH, and every
-instance is destroyed on any exit. cloud-init makes the start state, and the
-security group opens SSH to your public IP only.
+otherwise), with root login by password over SSH, runs `run.sh` against it, then
+does the same for `refuse-close.sh` and `docker.sh`. Each scenario gets its own
+instance, because `provision` closes SSH, and every instance is destroyed on any
+exit. cloud-init makes the start state, and the security group opens SSH to your
+public IP only.
 
 ### Prerequisites
 
@@ -59,15 +75,18 @@ security group opens SSH to your public IP only.
 
 | Command                  | Does |
 | ------------------------ | ---- |
-| `mise run e2e:aws`       | both scenarios, each on its own instance. It exits non-zero if either fails |
+| `mise run e2e:aws`       | every scenario, each on its own instance. It exits non-zero if one fails |
+| `mise run e2e:aws:docker` | the `docker` scenario alone, on its own instance |
 | `mise run e2e:aws:releases` | `e2e:aws` once for every release in `supported_os`. It prints `release 22.04: passed` or `release 22.04: FAILED` for each, runs every release even if one fails, and exits non-zero if any failed |
 | `mise run e2e:aws:up`    | creates one instance and prints its public IP |
 | `mise run e2e:aws:down`  | destroys it. Safe to repeat |
 | `mise run e2e:aws:sweep` | terminates leftover instances and security groups tagged `purpose=vps-setup-e2e` that are older than two hours |
 
-`tests/e2e/aws.sh up|run|refuse|down|sweep|all|releases` is the same interface
-without mise. Set `AWS_REGION` to change the region. A missing input exits with status 2
-and names what to set, before any AWS call.
+`tests/e2e/aws.sh up|run|refuse|docker|down|sweep|all|releases` is the same
+interface without mise. `all` takes scenario names, for example
+`aws.sh all docker`, and runs every scenario when it gets none. Set
+`AWS_REGION` to change the region. A missing input exits with status 2 and names
+what to set, before any AWS call.
 
 ### Which release
 
@@ -86,19 +105,22 @@ built in June 2025 and the newest 22.04 image in September 2026.
 
 ### What has been verified
 
-All measured on 2026-09-20, on AWS EC2 in `us-east-1` with a `t3.micro`:
+All measured on 2026-09-21, on AWS EC2 in `us-east-1` with a `t3.micro`:
 
-| Release | Result of `mise run e2e:aws` |
-| ------- | ---------------------------- |
-| 20.04   | passed |
-| 22.04   | passed |
-| 24.04   | passed |
-| 26.04   | passed |
+| Release | `run` | `refuse` | `docker` |
+| ------- | ----- | -------- | -------- |
+| 20.04   | passed | passed | passed |
+| 22.04   | passed | passed | passed |
+| 24.04   | passed | passed | passed |
+| 26.04   | passed | passed | passed |
 
 `run` checks the installed state, the closed state, and the closed state again
-after a reboot. `refuse` checks the refusal. The first 24.04 run failed after
-`close-ssh`, because removing OpenSSH left `ssh.socket` and `ssh.service` active.
-[How it works](./how-it-works.md#close-ssh) says what step 30 does about that.
+after a reboot. `refuse` checks the refusal. `docker` checks the guard. The first
+24.04 run failed after `close-ssh`, because removing OpenSSH left `ssh.socket`
+and `ssh.service` active. [How it works](./how-it-works.md#close-ssh) says what
+step 30 does about that. On 20.04 Docker's install script fails on a package
+Docker no longer ships for that release, so `docker.sh` installs the engine
+packages by name.
 
 The generated root password is kept only in Terraform state under
 `tests/e2e/aws/`, which is gitignored. It reaches SSH through `SSH_ASKPASS` and
@@ -108,10 +130,10 @@ never appears in argv or in any other file. If a run crashes, run
 ### Cost
 
 Each scenario runs one t3.micro instance with a 16 GB root volume and a public
-IPv4 address, for the minutes the scenario takes. A full pass of one release, both
-scenarios, took about six minutes, so `mise run e2e:aws:releases` takes about
-four times that, because it runs the releases one after another. A leftover
-instance keeps costing until `sweep` removes it.
+IPv4 address, for the minutes the scenario takes: about six for `run`, three for
+`refuse` and nine for `docker`. `mise run e2e:aws:releases` runs the releases one
+after another, so it takes about four times as long as one. A leftover instance
+keeps costing until `sweep` removes it.
 
 ## What it does not cover
 
@@ -119,3 +141,5 @@ instance keeps costing until `sweep` removes it.
 - The login-URL mode. The AWS harness always passes `--key`.
 - The ten-minute join timeout, and a node held by device approval.
 - Providers other than AWS EC2.
+- Docker's nftables backend, and IPv6 for Swarm published ports. The `docker`
+  scenario checks IPv6 for the `docker run -p` port only.

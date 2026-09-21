@@ -16,7 +16,7 @@ failures=0
 
 # The PATH holds only env, which the helpers need, and the fakes, so a tailscale
 # on this machine cannot leak in. The fake apt-get logs its last argument and
-# the fake dpkg all of them.
+# the fake dpkg all of them; it prints $FAKE_AUDIT for --audit.
 mkdir "$tmp/first" "$tmp/again"
 cat >"$tmp/apt-get" <<'FAKE'
 #!/bin/sh
@@ -26,6 +26,7 @@ FAKE
 cat >"$tmp/dpkg" <<'FAKE'
 #!/bin/sh
 echo "dpkg $*" >>"$FAKE_CALLS"
+[ "$1" != --audit ] || printf '%s' "$FAKE_AUDIT"
 FAKE
 printf '#!/bin/sh\nexit 0\n' >"$tmp/tailscale"
 chmod +x "$tmp/apt-get" "$tmp/dpkg" "$tmp/tailscale"
@@ -55,12 +56,21 @@ run_step() {
 	stderr=$(<"$tmp/stderr")
 }
 
+FAKE_AUDIT='The following packages are only half configured:
+ tailscale  the tailnet client'
+export FAKE_AUDIT
 run_step "$tmp/first"
-assert "no tailscale: returns 0" [ "$status" -eq 0 ]
-assert "no tailscale: configures dpkg, updates, then upgrades" \
-	[ "$(<"$FAKE_CALLS")" == $'dpkg --force-confdef --force-confold --configure -a\napt-get update\napt-get full-upgrade' ]
-assert "no tailscale: says it is upgrading" [ "$stderr" == '==> upgrading installed packages' ]
-assert "no tailscale: keeps apt's output off stdout" [ -z "$stdout" ]
+assert "no tailscale, dpkg broken: returns 0" [ "$status" -eq 0 ]
+assert "no tailscale, dpkg broken: audits, repairs, updates, then upgrades" \
+	[ "$(<"$FAKE_CALLS")" == $'dpkg --audit\ndpkg --force-confdef --force-confold --configure -a\napt-get update\napt-get full-upgrade' ]
+assert "no tailscale, dpkg broken: says it is upgrading" [ "$stderr" == '==> upgrading installed packages' ]
+assert "no tailscale, dpkg broken: keeps apt's output off stdout" [ -z "$stdout" ]
+
+FAKE_AUDIT=
+run_step "$tmp/first"
+assert "no tailscale, dpkg healthy: returns 0" [ "$status" -eq 0 ]
+assert "no tailscale, dpkg healthy: audits, does not repair, then updates and upgrades" \
+	[ "$(<"$FAKE_CALLS")" == $'dpkg --audit\napt-get update\napt-get full-upgrade' ]
 
 run_step "$tmp/again"
 assert "tailscale installed: returns 0" [ "$status" -eq 0 ]

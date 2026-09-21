@@ -37,8 +37,9 @@ fixes. The step runs `apt-get update` and `apt-get full-upgrade`, so the server
 is current before Tailscale joins and the firewall goes up. A failure stops
 `install`. Kernel and libc updates create `/var/run/reboot-required`, which step
 90 and `bin/provision` act on. A run cut off during the upgrade leaves dpkg
-unfinished, and the step runs `dpkg --configure -a` first, so the next run
-repairs it.
+unfinished. When `dpkg --audit` reports that, the step runs
+`dpkg --configure -a` first, so the next run repairs it. It asks `dpkg --audit`
+because that takes no lock, and `dpkg --configure -a` does not wait for one.
 
 Only the first run upgrades. When Tailscale is already installed, the step logs
 one line and does nothing, because upgrading can restart `tailscaled`, which
@@ -74,6 +75,32 @@ script creates it first. With sshd absent there is no SSH rule, which is why
 running `install` again after `close-ssh` changes nothing. `ufw --force enable`
 comes last, so the root session that is running the script is never dropped by
 a default-deny with no allow behind it.
+
+**35 docker guard.** Docker publishes container ports with iptables rules that
+run before ufw's input rules, so ufw's deny does not cover containers. The step
+appends a block between `# BEGIN vps-setup docker guard` and
+`# END vps-setup docker guard` to `/etc/ufw/after.rules` and
+`/etc/ufw/after6.rules`. It fills `DOCKER-USER`, the chain Docker runs first:
+new connections into a container are dropped, unless they arrive on loopback,
+the tailnet or a container bridge, or a `ufw route allow` rule accepted them.
+[Docker on this server](./docker.md) has the details and how to open a port.
+
+The block lives in `after.rules` because ufw loads that file on every boot and
+`ufw reload`, so the guard is there before Docker is installed, and Docker never
+flushes `DOCKER-USER`, so a restart keeps it. ufw restores `after.rules` before
+it creates its user chains, so each block declares the chain it jumps to first:
+`ufw-user-forward` in the IPv4 file and `ufw6-user-forward` in the IPv6 one.
+Those lines are all that differ between the two blocks.
+
+A block already in a file is replaced, so a second run leaves both files
+unchanged, and ufw reloads only when one changed. A file with a begin marker and
+no end marker stops the run, because deleting from it to the end would drop
+rules that are not ours.
+
+ufw stays `active` on its old rules when it cannot restore a file, so after the
+reload the step reads `DOCKER-USER` with `iptables` and `ip6tables`. If either
+lacks the drop rule, it stops and says ufw kept its old rules. Root SSH is still
+open then.
 
 **40 updates.** It installs `unattended-upgrades`, writes
 `/etc/apt/apt.conf.d/20auto-upgrades` to turn on the package-list update and the
@@ -150,6 +177,8 @@ After `close-ssh`, the server has:
   listening on port 22;
 - root locked, and the admin user reachable only through Tailscale SSH;
 - ufw active, denying incoming traffic except on `tailscale0`;
+- `DOCKER-USER` dropping new connections into containers, IPv4 and IPv6, that no
+  `ufw route allow` rule accepted;
 - the same SSH host key as before.
 
 `tests/e2e/verify.sh closed` checks each of these. systemd's ssh generator can

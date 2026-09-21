@@ -12,7 +12,7 @@ build            concatenates the fragments into dist/install.sh and writes
 lib/             helpers and the dispatcher: apt, dispatch, log, os, quiet, root, sshd
 steps/install/   the install phase, one file per step: 00-config,
                  05-first-boot, 06-upgrade, 10-user, 20-tailscale, 30-firewall,
-                 40-updates, 90-next-steps
+                 35-docker-guard, 40-updates, 90-next-steps
 steps/close-ssh/ the close-ssh phase: 10-session, 20-firewall, 30-openssh, 40-root
 bin/             provision, resolve-key and release, which run on your machine
 tests/           unit tests that run anywhere, and tests/e2e for real servers
@@ -63,12 +63,15 @@ reads the same list.
 ## Tests
 
 `tests/guards.sh`, `tests/os.sh`, `tests/first-boot.sh`, `tests/upgrade.sh`,
-`tests/config.sh`, `tests/updates.sh`, `tests/quiet.sh` and
-`tests/resolve-key.sh` run anywhere and need no root. `guards.sh` runs the
-generated script. `os.sh`, `first-boot.sh`, `upgrade.sh`, `config.sh`,
-`updates.sh` and `quiet.sh` source the fragments. `first-boot.sh` puts a fake
-`cloud-init`, `upgrade.sh` a fake `tailscale` and `apt-get`, and
-`resolve-key.sh` a fake `curl` first on `PATH`.
+`tests/docker-guard.sh`, `tests/config.sh`, `tests/updates.sh`,
+`tests/quiet.sh` and `tests/resolve-key.sh` run anywhere and need no root.
+`guards.sh` runs the generated script. `os.sh`, `first-boot.sh`, `upgrade.sh`,
+`docker-guard.sh`, `config.sh`, `updates.sh` and `quiet.sh` source the
+fragments. `first-boot.sh` puts a fake `cloud-init`, `upgrade.sh` a fake
+`tailscale`, `dpkg` and `apt-get`, `docker-guard.sh` a fake `ufw`, `iptables`
+and `ip6tables`, and `resolve-key.sh` a fake `curl` first on `PATH`.
+`docker-guard.sh` runs the step's helpers on temporary files, not on
+`/etc/ufw`.
 `tests/e2e/` needs a real server, and [Testing](./docs/testing.md) describes it.
 
 ## Boundaries that are deliberate
