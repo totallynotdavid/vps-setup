@@ -3,6 +3,8 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
+# shellcheck source-path=SCRIPTDIR/..
+source lib/os.sh
 script=dist/install.sh
 [[ -f $script ]] || {
 	echo "error: $script is missing; run ./build first" >&2
@@ -55,16 +57,15 @@ run bash "$script" --help
 assert "--help exits 0" [ "$status" -eq 0 ]
 assert "--help prints usage" has_usage "$stdout"
 
-# Refusals never change the host. Only root on the supported OS would really run install.
-# shellcheck source=/dev/null
-os=$(. /etc/os-release && echo "$ID $VERSION_ID")
-if [[ $os == "ubuntu 26.04" ]]; then
+# Refusals never change the host. Only root on a supported OS would really run install.
+os=$(host_os)
+if os_is_supported "$os"; then
 	refusal="must run as root"
 else
 	refusal="unsupported OS"
 fi
-if ((EUID == 0)) && [[ $os == "ubuntu 26.04" ]]; then
-	echo "SKIP refusal tests: running as root on the supported OS"
+if ((EUID == 0)) && os_is_supported "$os"; then
+	echo "SKIP refusal tests: running as root on a supported OS"
 else
 	user=vpssetup-guard-test
 	for phase in install close-ssh; do
