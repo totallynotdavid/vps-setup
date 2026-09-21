@@ -26,6 +26,8 @@ fi
 IFS= read -r -d '' remote_facts <<'REMOTE' || true
 echo "sudo=$(sudo -n true 2>/dev/null && echo yes || echo no)"
 echo "ufw_status=$(sudo -n ufw status verbose 2>&1 | grep -E '^(Status|Default):' | tr '\n' ' ')"
+echo "docker_guard_v4=$(sudo -n iptables -S DOCKER-USER 2>&1 | grep -c -- '--ctstate NEW -j DROP')"
+echo "docker_guard_v6=$(sudo -n ip6tables -S DOCKER-USER 2>&1 | grep -c -- '--ctstate NEW -j DROP')"
 echo "unattended=$(systemctl is-active unattended-upgrades || true)"
 echo "ts_origin=$(apt-config dump | grep -cxF 'Unattended-Upgrade::Origins-Pattern:: "origin=Tailscale,label=Tailscale";')"
 echo "auto_reboot=$(apt-config dump | sed -n 's/^Unattended-Upgrade::Automatic-Reboot "\(.*\)";$/\1/p')"
@@ -88,6 +90,8 @@ assert() {
 assert "tailnet ssh works ($host_key_checking host key checking)" collect_facts
 assert "ufw is active" fact_has ufw_status "Status: active"
 assert "ufw defaults to deny incoming" fact_has ufw_status "deny (incoming)"
+assert "DOCKER-USER drops new IPv4 connections that no route rule accepted" fact_is docker_guard_v4 1
+assert "DOCKER-USER drops new IPv6 connections that no route rule accepted" fact_is docker_guard_v6 1
 
 case $mode in
 installed)

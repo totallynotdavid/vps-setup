@@ -19,19 +19,20 @@ export TF_VAR_region=$region
 
 print_usage() {
 	cat <<'EOF_USAGE'
-usage: aws.sh up | run | refuse | down | sweep | all | releases
+usage: aws.sh up | run | refuse | docker | down | sweep | all [scenario...] | releases
 
   up        create the server and wait until root and its password work; prints its public IP
   run       tests/e2e/run.sh against that server
   refuse    tests/e2e/refuse-close.sh against that server
+  docker    tests/e2e/docker.sh against that server
   down      destroy the server; safe to repeat
   sweep     terminate leftovers older than two hours, in case a run crashed
-  all       for run and refuse: up, scenario, down; always destroys
+  all       for each scenario named (default: run refuse docker): up, scenario, down; always destroys
   releases  all once per supported Ubuntu release; one result line each, exits 1 if any failed
 
 environment:
   AWS_PROFILE        or AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY; for every command
-  TS_TEST_KEY_FILE   file holding an OAuth client secret or an auth key; for run, refuse and all
+  TS_TEST_KEY_FILE   file holding an OAuth client secret or an auth key; for run, refuse, docker and all
   ADMIN_USER         admin account to create (default: admin)
   TS_TAGS            tags of the key or client (default: tag:vps-test)
   AWS_REGION         region (default: us-east-1)
@@ -238,12 +239,20 @@ teardown_on_exit() {
 	exit "$status"
 }
 
+cmd_docker() {
+	local ip run_id
+	ip=$(server_output public_ip)
+	run_id=$(server_output run_id)
+	with_root_password "$repo/tests/e2e/docker.sh" "root@$ip" "e2e-$run_id" --key "$TS_TEST_KEY_FILE"
+}
+
 cmd_all() {
 	local scenario ip failed=()
+	(($# > 0)) || set -- run refuse docker
 	trap teardown_on_exit EXIT
 	trap 'exit 130' INT
 	trap 'exit 143' TERM
-	for scenario in run refuse; do
+	for scenario in "$@"; do
 		log "scenario $scenario"
 		server_may_exist=1
 		if ip=$("$self" up) && log "server at $ip" && "$self" "$scenario"; then
@@ -278,7 +287,8 @@ cmd_releases() {
 	((${#failed[@]} == 0)) || die "failed: ${failed[*]}"
 }
 
-(($# == 1)) || usage
+(($# >= 1)) || usage
+[[ $1 == all ]] || (($# == 1)) || usage
 case $1 in
 -h | --help)
 	print_usage
@@ -287,9 +297,15 @@ case $1 in
 up | down | sweep)
 	require_inputs 0
 	;;
-run | refuse | all | releases)
+run | refuse | docker | releases)
+	require_inputs 1
+	;;
+all)
+	for scenario in "${@:2}"; do
+		[[ $scenario == run || $scenario == refuse || $scenario == docker ]] || usage
+	done
 	require_inputs 1
 	;;
 *) usage ;;
 esac
-"cmd_$1"
+"cmd_$1" "${@:2}"
