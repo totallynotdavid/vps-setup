@@ -67,6 +67,46 @@ blocked. Allow it with:
 sudo ufw route allow in on <bridge>
 ```
 
+## After a reboot
+
+The server reboots itself after an update that needs it. See
+[Inputs](./inputs.md). `AUTO_REBOOT=off` turns it off.
+
+This was run on 2026-09-21 on an AWS Ubuntu 26.04 server, after a full `install`
+and `close-ssh`, with Docker 29.8.1 and Dokploy 0.30.7. The reboot was scheduled
+with `shutdown -r +1`, which is how `unattended-upgrades` issues it.
+
+- Containers started with `--restart unless-stopped` were running after the
+  boot: a plain `docker run`, a compose service with
+  `restart: unless-stopped`, and a cloudflared container, which registered a new
+  tunnel connection.
+- Containers started with no restart flag stayed `exited`: a plain `docker run`,
+  a compose service without `restart:`, and a cloudflared container.
+  `docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' NAME` printed `no` for
+  them, so Docker's default is `no`.
+- Traefik, whose restart policy is `always`, answered 404 on `127.0.0.1:80`
+  15 seconds after boot.
+- Dokploy's own services, which run on Swarm, came back about 26 seconds after a
+  reboot, on 24.04 and on 26.04. A snapshot taken 15 seconds after boot still
+  showed Swarm services at `0/1`, so give them a minute.
+- The guard was loaded for IPv4 and IPv6 after the boot, and ports 80, 443 and
+  3000 timed out from a non-tailnet interface.
+- SSH answered again about 20 seconds after the reboot began. A provider's
+  server may take longer.
+
+Every container that has to come back needs a restart policy:
+`--restart unless-stopped` for `docker run`, `restart: unless-stopped` in a
+compose file. A cloudflared container without one stays down, and the tunnel
+with it, so the site is unreachable until someone starts it again. Nothing on a
+Tailscale-only server shows that. Start it with `--restart unless-stopped`.
+
+Not covered:
+
+- cloudflared as a systemd service on the host after a reboot.
+- An application deployed through the Dokploy dashboard after a reboot.
+- A database that needs more than Docker's stop timeout to shut down cleanly.
+- How long a provider's server takes to boot.
+
 ## What it does not cover
 
 - **Swarm's own ports.** 2377, 7946 and 4789 are host ports, and ufw's input
