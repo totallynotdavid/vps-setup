@@ -20,7 +20,9 @@ run = [
 	"tests/guards.sh",
 	"tests/os.sh",
 	"tests/first-boot.sh",
+	"tests/upgrade.sh",
 	"tests/config.sh",
+	"tests/updates.sh",
 	"tests/quiet.sh",
 	"tests/resolve-key.sh",
 ]

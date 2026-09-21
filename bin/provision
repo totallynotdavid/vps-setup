@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Runs the whole flow from the operator's machine: install, verify the tailnet
-# path, close-ssh, verify again.
+# Runs the whole flow from the operator's machine: install, reboot if needed,
+# verify the tailnet path, close-ssh, verify again.
 set -euo pipefail
 
 repo=$(cd "$(dirname "$0")/.." && pwd)
@@ -23,6 +23,8 @@ environment:
   TS_TAGS      comma-separated tags, e.g. tag:server (default: none; required
                with a client secret, and equal to the client's tags)
   TS_EPHEMERAL 1 makes a key minted from a client secret ephemeral (default: no)
+  AUTO_REBOOT  time of the automatic reboot after updates, HH:MM, or off
+               (default: 04:00)
 EOF_USAGE
 }
 
@@ -76,8 +78,10 @@ key_on_server=0
 # A reinstalled server keeps its IP and gets a new host key, so root's host key
 # lives in a private file that lasts one run and ~/.ssh/known_hosts is untouched.
 # The password goes first: six agent keys tried before it exhaust sshd's MaxAuthTries.
+# The keepalives end a dead connection in about a minute, not after TCP's own retries.
 root_opts=(-o "ControlPath=$tmp/control" -o "UserKnownHostsFile=$tmp/known_hosts" -o StrictHostKeyChecking=accept-new
-	-o "PreferredAuthentications=password,keyboard-interactive,publickey")
+	-o "PreferredAuthentications=password,keyboard-interactive,publickey"
+	-o ServerAliveInterval=15 -o ServerAliveCountMax=4)
 
 root_ssh() {
 	ssh "${root_opts[@]}" -o ControlMaster=no "$target" "$@"
@@ -118,6 +122,26 @@ wait_for_tailnet() {
 	done
 }
 
+# A new kernel or libc needs a reboot. Doing it here shows the server returns on
+# the tailnet, and boots the new kernel, while root SSH still works.
+reboot_if_required() {
+	local facts boot_before boot_now deadline=$((SECONDS + 300))
+	facts=$(root_ssh 'cat /proc/sys/kernel/random/boot_id; [ ! -e /var/run/reboot-required ] || echo pending' </dev/null) ||
+		die "could not check $target for a pending reboot; public SSH is still open and nothing was closed"
+	[[ $facts == *pending ]] || return 0
+	boot_before=${facts%%$'\n'*}
+
+	log "reboot $target"
+	root_ssh 'systemctl reboot' </dev/null || true
+	ssh "${root_opts[@]}" -O exit "$target" &>/dev/null || true
+	until boot_now=$(ssh -o ControlPath=none "${root_opts[@]}" -o ConnectTimeout=5 "$target" \
+		'cat /proc/sys/kernel/random/boot_id' </dev/null 2>/dev/null) && [[ $boot_now != "$boot_before" ]]; do
+		((SECONDS < deadline)) ||
+			die "$target did not answer root SSH after the reboot within 5 minutes; public SSH is still open and nothing was closed"
+		sleep 3
+	done
+}
+
 # Resolved before the server is touched, so a bad secret fails early.
 if [[ -n $key_file ]]; then
 	log "resolve the auth key"
@@ -138,12 +162,16 @@ fi
 
 log "install"
 remote_env=$(printf 'ADMIN_USER=%q TS_HOSTNAME=%q TS_TAGS=%q' "$admin" "$name" "${TS_TAGS:-}")
+if [[ -n ${AUTO_REBOOT:-} ]]; then
+	remote_env+=$(printf ' AUTO_REBOOT=%q' "$AUTO_REBOOT")
+fi
 if [[ -n $key_file ]]; then
 	remote_env+=' TS_AUTHKEY_FILE=/root/ts.key'
 fi
 root_ssh "$remote_env bash -s install" <"$repo/dist/install.sh" ||
 	die "install failed; public SSH is still open and nothing was closed"
 remove_key
+reboot_if_required
 
 log "wait for $admin@$name on the tailnet"
 wait_for_tailnet
