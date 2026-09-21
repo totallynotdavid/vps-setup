@@ -18,8 +18,16 @@ the variable.
 tailnet.
 
 `AUTO_REBOOT` is the time, on the server's clock, at which
-`unattended-upgrades` reboots the server after an update that needs it. See
-[How it works](./how-it-works.md#install) for what it writes.
+`unattended-upgrades` reboots the server after an update that needs it. It does
+not reboot every day. See [How it works](./how-it-works.md#install) for what it
+writes.
+
+The server's clock follows the server's timezone. vps-setup does not set a
+timezone, so the server keeps the one its image ships. Check it with
+`timedatectl`. A Contabo Ubuntu 26.04 image shipped `Europe/Berlin` on
+2026-09-21. That zone follows daylight saving time, so a fixed `HH:MM` moves by
+an hour against UTC twice a year. `sudo timedatectl set-timezone UTC` pins it.
+On a UTC server, `AUTO_REBOOT=09:00` is 04:00 at UTC-5.
 
 `install.sh` takes exactly one argument: `install` or `close-ssh`. `-h` and
 `--help` print the usage and exit 0. Any other call prints the usage and exits 2.
