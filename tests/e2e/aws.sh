@@ -5,9 +5,12 @@
 set -euo pipefail
 
 repo=$(cd "$(dirname "$0")/../.." && pwd)
+# shellcheck source-path=SCRIPTDIR/../..
+source "$repo/lib/os.sh"
 self=$repo/tests/e2e/aws.sh
 tf_dir=$repo/tests/e2e/aws
 region=${AWS_REGION:-us-east-1}
+ubuntu_version=${UBUNTU_VERSION:-26.04}
 TS_TAGS=${TS_TAGS:-tag:vps-test}
 max_age=$((2 * 3600))
 export TS_TAGS
@@ -16,14 +19,15 @@ export TF_VAR_region=$region
 
 print_usage() {
 	cat <<'EOF_USAGE'
-usage: aws.sh up | run | refuse | down | sweep | all
+usage: aws.sh up | run | refuse | down | sweep | all | releases
 
-  up       create the server and wait until root and its password work; prints its public IP
-  run      tests/e2e/run.sh against that server
-  refuse   tests/e2e/refuse-close.sh against that server
-  down     destroy the server; safe to repeat
-  sweep    terminate leftovers older than two hours, in case a run crashed
-  all      for run and refuse: up, scenario, down; always destroys
+  up        create the server and wait until root and its password work; prints its public IP
+  run       tests/e2e/run.sh against that server
+  refuse    tests/e2e/refuse-close.sh against that server
+  down      destroy the server; safe to repeat
+  sweep     terminate leftovers older than two hours, in case a run crashed
+  all       for run and refuse: up, scenario, down; always destroys
+  releases  all once per supported Ubuntu release; one result line each, exits 1 if any failed
 
 environment:
   AWS_PROFILE        or AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY; for every command
@@ -31,6 +35,7 @@ environment:
   ADMIN_USER         admin account to create (default: admin)
   TS_TAGS            tags of the key or client (default: tag:vps-test)
   AWS_REGION         region (default: us-east-1)
+  UBUNTU_VERSION     Ubuntu release of the server, for example 24.04 (default: 26.04)
 EOF_USAGE
 }
 
@@ -141,7 +146,8 @@ cmd_up() {
 	fi
 	run_id=$(new_run_id)
 	log "create run $run_id, SSH open to $cidr only"
-	tf apply -input=false -auto-approve -var "run_id=$run_id" -var "ssh_source_cidr=$cidr" >&2
+	tf apply -input=false -auto-approve -var "run_id=$run_id" -var "ssh_source_cidr=$cidr" \
+		-var "ubuntu_version=$ubuntu_version" >&2
 	ip=$(server_output public_ip)
 	wait_until_ready "$ip"
 	printf '%s\n' "$ip"
@@ -162,10 +168,12 @@ cmd_refuse() {
 }
 
 # Destroying only reads the state, so the two required variables take placeholders.
+# The release is passed too, because Terraform validates it and reads its image on destroy.
 cmd_down() {
 	log "destroy"
 	tf init -input=false >&2
-	tf destroy -input=false -auto-approve -var run_id=destroy -var ssh_source_cidr=192.0.2.1/32 >&2
+	tf destroy -input=false -auto-approve -var run_id=destroy -var ssh_source_cidr=192.0.2.1/32 \
+		-var "ubuntu_version=$ubuntu_version" >&2
 }
 
 older_than_max_age() {
@@ -251,6 +259,25 @@ cmd_all() {
 	((${#failed[@]} == 0)) || die "failed: ${failed[*]}"
 }
 
+cmd_releases() {
+	local supported release failed=()
+	local -a releases
+	trap 'exit 130' INT
+	trap 'exit 143' TERM
+	mapfile -t releases < <(supported_os)
+	for supported in "${releases[@]}"; do
+		release=${supported#* }
+		log "release $release"
+		if UBUNTU_VERSION=$release "$self" all; then
+			printf 'release %s: passed\n' "$release"
+		else
+			printf 'release %s: FAILED\n' "$release"
+			failed+=("$release")
+		fi
+	done
+	((${#failed[@]} == 0)) || die "failed: ${failed[*]}"
+}
+
 (($# == 1)) || usage
 case $1 in
 -h | --help)
@@ -260,7 +287,7 @@ case $1 in
 up | down | sweep)
 	require_inputs 0
 	;;
-run | refuse | all)
+run | refuse | all | releases)
 	require_inputs 1
 	;;
 *) usage ;;
