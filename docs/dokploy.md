@@ -193,12 +193,113 @@ servers on one tailnet on 2026-09-21.
    `cloudflared_tunnel_total_requests` counter, on its metrics port, rose with
    the requests sent.
 
-5. Deploy each application on the new server with its domain as it moves. When
-   the last one has moved, delete the file.
+5. Move each application to the new server, as described in
+   [Move the applications](#move-the-applications). When the last one has
+   moved, delete the file.
+
+## Move the applications
+
+Restoring the old server's Dokploy database moves projects, applications,
+composes, remote servers and users in one step. Both servers ran Dokploy 0.30.7.
+This ran on 2026-09-21.
+
+1. On the old server, dump the database and copy the file to the new server:
+
+   ```sh
+   docker exec <the Postgres container> pg_dump -U dokploy -Fc dokploy > dokploy.dump
+   ```
+
+2. On the new server, dump its own database the same way first. That is the way
+   back.
+3. Scale the dashboard to zero with `docker service scale dokploy=0`. Traefik
+   and the tunnel connector keep running.
+4. In the Postgres container, drop and create the `dokploy` database, then run
+   `pg_restore -U dokploy -d dokploy --no-owner --no-privileges` on the dump.
+5. Scale the dashboard back to one with `docker service scale dokploy=1`.
+
+The counts of projects, applications, composes and servers matched the old
+server, and the log showed no errors. The accounts and the API keys are the old
+server's from then on.
+
+Four things did not come across.
+
+**Environment variables.** Dokploy stores them as `enc:v1:` values (AES-256-GCM)
+with a key derived from the server's `BETTER_AUTH_SECRET`. The new server logged
+`Failed to decrypt an encrypted column; returning the raw value`, so a deploy
+would have passed the ciphertext as the environment. Dokploy reads extra keys
+from `/etc/dokploy/encryption.key`, one 64-hex key per line. The function
+`exportEncryptionKeys()` in the old server's
+`@dokploy/server/dist/lib/encryption.js` prints the derived keys, not the raw
+secret. Run it in the old server's `dokploy` container and pipe the output to
+the new server. All 19 variables of a test application then decrypted.
+Importing the module also prints a line of text, so keep only the lines that are
+64 hex characters. Keep the file mode at 0600, owned by root. Dokploy
+re-encrypts a value only when it next writes it, so the file stays needed. A
+copy kept off the server makes a dump restorable after the server is lost.
+
+**Traefik router files.** They are files in `/etc/dokploy/traefik/dynamic/`, not
+database rows. A restored domain has no router until it is saved again. Calling
+`domain.update` in the API with the same values writes `<app name>.yml`. Before
+that, the new server answered the host through the forwarding file above and
+gave the same answer, so only Traefik's router list showed the difference:
+
+```sh
+docker exec dokploy-traefik wget -qO- http://localhost:8080/api/http/routers
+```
+
+**The daily Docker cleanup.** `enableDockerCleanup` in the web server settings
+came across as true. Images copied by hand are not in use yet, and the cleanup
+can remove them, so turn it off until they are.
+
+**The old dashboard's domain.** The web server setting `host` came across too.
+Clear it, so the new server never routes that name. Both settings were changed
+in the database while the dashboard was stopped.
+
+### Copy the images
+
+Images built on the old server have to reach the new one. This copied 8 images,
+5.7 GB, in 9 minutes 50 seconds, about 15 MB/s over a tailnet:
+
+```sh
+docker save <images> | gzip -1 | ssh web2 'gunzip | docker load'
+```
+
+The image IDs differ on the two servers, because a classic image store and a
+containerd store name the same image differently. The layer lists matched for
+all 8:
+
+```sh
+docker image inspect --format '{{json .RootFS.Layers}}' <image>
+```
+
+### Deploy an image that exists only locally
+
+A Docker-image application runs `docker pull` on every deploy. An image that
+exists only in the local store fails with
+`pull access denied ... repository does not exist`, and nothing is created. A
+registry on the loopback address fixes it:
+
+```sh
+docker run -d --name registry --restart unless-stopped \
+  -p 127.0.0.1:5000:5000 -v registry-data:/var/lib/registry registry:3
+docker tag app:latest 127.0.0.1:5000/app:1
+docker push 127.0.0.1:5000/app:1
+```
+
+Set `127.0.0.1:5000/app:1` as the application's image. Docker allows a loopback
+registry over HTTP, and the pull reported the image as up to date straight away.
+Turn the application's automatic deploy off, because it has no repository to
+watch.
+
+### Check that the new server answers
+
+One application moved this way answered through the tunnel from the new server.
+Twelve requests from outside all got the same answer as before, and the old
+server's access log saw none of them. The status and the body matched what the
+old server gave.
 
 ## Not covered
 
-- A Dokploy application routed through the tunnel.
 - cloudflared as a systemd service on the host after a reboot.
 - An application built from source and deployed through the dashboard, after a
   reboot. Only the connector, made through the API from an image, was tried.
