@@ -8,6 +8,7 @@ if (($# != 4)) || [[ $1 != installed && $1 != closed ]]; then
 	exit 2
 fi
 mode=$1 host=$2 admin=$3 public_ip=$4
+auto_reboot=${AUTO_REBOOT:-04:00}
 
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=known-hosts.sh
@@ -26,6 +27,10 @@ IFS= read -r -d '' remote_facts <<'REMOTE' || true
 echo "sudo=$(sudo -n true 2>/dev/null && echo yes || echo no)"
 echo "ufw_status=$(sudo -n ufw status verbose 2>&1 | grep -E '^(Status|Default):' | tr '\n' ' ')"
 echo "unattended=$(systemctl is-active unattended-upgrades || true)"
+echo "ts_origin=$(apt-config dump | grep -cxF 'Unattended-Upgrade::Origins-Pattern:: "origin=Tailscale,label=Tailscale";')"
+echo "auto_reboot=$(apt-config dump | sed -n 's/^Unattended-Upgrade::Automatic-Reboot "\(.*\)";$/\1/p')"
+echo "auto_reboot_time=$(apt-config dump | sed -n 's/^Unattended-Upgrade::Automatic-Reboot-Time "\(.*\)";$/\1/p')"
+echo "auto_reboot_users=$(apt-config dump | sed -n 's/^Unattended-Upgrade::Automatic-Reboot-WithUsers "\(.*\)";$/\1/p')"
 echo "health=$(sudo -n tailscale status --json | python3 -c 'import json, sys; print("; ".join(json.load(sys.stdin).get("Health") or []))' || echo 'status unavailable')"
 echo "sshd_installed=$([ -x /usr/sbin/sshd ] && echo yes || echo no)"
 echo "ssh_socket=$(systemctl is-active ssh.socket || true)"
@@ -88,6 +93,14 @@ case $mode in
 installed)
 	assert "sudo -n true works" fact_is sudo yes
 	assert "unattended-upgrades is active" fact_is unattended active
+	assert "unattended-upgrades allows the Tailscale origin" fact_is ts_origin 1
+	if [[ $auto_reboot == off ]]; then
+		assert "automatic reboot is off" fact_is auto_reboot false
+	else
+		assert "automatic reboot is on" fact_is auto_reboot true
+		assert "automatic reboot is at $auto_reboot" fact_is auto_reboot_time "$auto_reboot"
+		assert "automatic reboot runs with users logged in" fact_is auto_reboot_users true
+	fi
 	assert "Tailscale health is empty" fact_is health ""
 	assert "sshd is installed" fact_is sshd_installed yes
 	assert "public port 22 accepts a connection" public_port_22_connects
