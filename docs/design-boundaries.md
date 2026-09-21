@@ -44,7 +44,7 @@ rest is scope it has not grown into yet.
 
 These are gaps, not commitments to never build them.
 
-- **Other Ubuntu releases.** A new release needs a run of both AWS scenarios on
+- **Other Ubuntu releases.** A new release needs a run of the AWS scenarios on
   it, then an entry in `supported_os` in `lib/os.sh`. See
   [Testing](./testing.md).
 - **Other providers.** The steps have been run on a Contabo server and on AWS EC2

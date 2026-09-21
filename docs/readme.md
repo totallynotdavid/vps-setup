@@ -5,6 +5,7 @@
 - [Inputs](./inputs.md)
 - [Auth key](./auth-key.md)
 - [Tailnet policy](./tailnet-policy.md)
+- [Docker on this server](./docker.md)
 - [How it works](./how-it-works.md)
 - [Design boundaries](./design-boundaries.md)
 - [Testing](./testing.md)

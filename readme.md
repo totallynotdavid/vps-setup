@@ -25,6 +25,9 @@ to open it. The last line of the output is the `ssh` command to use from now on.
   Tailscale SSH on.
 - Turns on the ufw firewall: everything incoming is denied except traffic on
   the tailnet interface.
+- Keeps that promise for Docker containers, if you install Docker later: no
+  published port is open to the internet unless you open it with
+  `ufw route allow`. See [Docker on this server](./docs/docker.md).
 - Upgrades the server once, keeps Tailscale updated through apt, and reboots at
   04:00 when an update needs it. [Inputs](./docs/inputs.md) says how to turn the
   reboot off.
@@ -44,8 +47,8 @@ each.
 ## Documentation
 
 The [manual](./docs/readme.md) covers the first run, the same flow by hand, the
-inputs, auth keys, the tailnet policy, what happens on the server and how to
-test it. Start with [Get started](./docs/get-started.md).
+inputs, auth keys, the tailnet policy, Docker, what happens on the server and
+how to test it. Start with [Get started](./docs/get-started.md).
 
 ## Contributing
 
