@@ -45,6 +45,10 @@ you to open it. With `--key`, the run needs no browser. See
 5. Runs `close-ssh` through that tailnet session, then checks that public SSH
    is closed.
 
+On a server that has just booted, `install` can pause for a few minutes while
+the provider's own upgrade finishes. Nothing is wrong. See
+[How it works](./how-it-works.md) for the detail.
+
 The checks in step 4 run before anything is closed. If one fails, `bin/provision`
 stops with public SSH still open. [How it works](./how-it-works.md) says what
 each step does on the server, and why in that order.
