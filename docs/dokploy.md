@@ -82,6 +82,14 @@ interface. A tunnel opens no inbound port, so it needs no `ufw route allow`.
 ufw allows outbound connections by default, so cloudflared's connection out to
 Cloudflare needs no rule.
 
+A cloudflared container needs a restart policy. After a reboot, run on
+2026-09-21, one started with `--restart unless-stopped` was running and
+registered a new tunnel connection. One started with no restart flag stayed
+`exited`, and the tunnel with it, so the site was unreachable until someone
+started it again. Docker's default is no restart. Start it with
+`--restart unless-stopped`. [After a reboot](./docker.md#after-a-reboot) has the
+rest.
+
 With a tunnel, do not open 80 and 443. If you publish without one,
 [Docker on this server](./docker.md#expose-a-port-on-purpose) says how to open
 a port on purpose.
@@ -90,6 +98,10 @@ a port on purpose.
 
 - A named tunnel with a token and a public hostname, such as `app.example.com`.
 - A Dokploy application routed through the tunnel.
+- cloudflared as a systemd service on the host after a reboot.
+- An application deployed through the Dokploy dashboard after a reboot.
+- A database that needs more than Docker's stop timeout to shut down cleanly.
+- How long a provider's server takes to boot.
 - Certificates behind the tunnel. Traefik's Let's Encrypt HTTP-01 challenge
   cannot be answered through a tunnel. This is from reading, not tried.
 - Reaching the dashboard from another tailnet machine. See

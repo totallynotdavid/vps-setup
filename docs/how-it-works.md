@@ -119,10 +119,10 @@ ones. It does two things:
   the Origin and Label in the Tailscale repository's Release file. No other
   origin is added.
 - It sets the reboot policy from `AUTO_REBOOT`. By default the server reboots at
-  04:00, with users logged in, when an update needs it. The kernel is the
-  isolation boundary for containers, and nobody logs in to notice
-  `/var/run/reboot-required`. `off` turns the reboot off. See
-  [Inputs](./inputs.md).
+  04:00 on the server's clock, with users logged in, when an update needs it.
+  The kernel is the isolation boundary for containers, and nobody logs in to
+  notice `/var/run/reboot-required`. `off` turns the reboot off. See
+  [Inputs](./inputs.md) for which clock.
 
 The file is the same on every run, so a second `install` changes nothing.
 
