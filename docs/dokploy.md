@@ -6,10 +6,11 @@ behind a Cloudflare Tunnel. A server set up another way has neither the guard
 nor the results below.
 
 Everything here was run on an AWS Ubuntu server on 2026-09-21, after a full
-`install` and `close-ssh`. The install steps and the dashboard check also ran on
-a Contabo server with Ubuntu 26.04 on the same day. The versions are Dokploy
-0.30.7, cloudflared 2026.9.1 and the packages in Docker's repositories on that
-day. Dokploy's installer is a third-party script and will change.
+`install` and `close-ssh`. The install steps, the dashboard check and a named
+tunnel also ran on a Contabo server with Ubuntu 26.04 on the same day. The
+versions are Dokploy 0.30.7, cloudflared 2026.9.1 and the packages in Docker's
+repositories on that day. Dokploy's installer is a third-party script and will
+change.
 
 ## Order
 
@@ -119,12 +120,88 @@ With a tunnel, do not open 80 and 443. If you publish without one,
 [Docker on this server](./docker.md#expose-a-port-on-purpose) says how to open
 a port on purpose.
 
+## Run the tunnel as a Dokploy application
+
+A tunnel that Cloudflare manages keeps its routes in the Cloudflare dashboard.
+The server runs only a connector with the tunnel's token. On the Contabo server
+the connector ran as a Dokploy application, made through Dokploy's API:
+
+- Source: the Docker image `cloudflare/cloudflared:2026.9.1`.
+- Arguments: `tunnel run`.
+- Environment: `TUNNEL_TOKEN=<the tunnel's token>`.
+- One replica.
+
+Dokploy puts its applications on `dokploy-network`, so a route to
+`http://dokploy-traefik:80` resolved. The connector registered four QUIC
+connections and took the tunnel's routes within a few seconds.
+
+Dokploy keeps the token in the application's environment, and its API returns it
+to anyone with an API key.
+
+After `systemctl reboot`, SSH answered at 38 seconds. The connector's service
+was at 1/1 after about 47 seconds, with its four connections registered again.
+Dokploy's own service was at 1/1 after about 84 seconds. The application had no
+restart setting of its own. Swarm restarted it.
+
+## Move a tunnel from another server
+
+To move a running tunnel's connector to a new Dokploy server without downtime,
+make the new server forward every host it has no application for to the old
+server, then start the connector on the new one. This ran between two Dokploy
+servers on one tailnet on 2026-09-21.
+
+1. On the new server, add a file to `/etc/dokploy/traefik/dynamic/`:
+
+   ```yaml
+   http:
+     routers:
+       old-server:
+         rule: HostRegexp(`^.+$`)
+         priority: 1
+         entryPoints:
+           - web
+         service: old-server
+     services:
+       old-server:
+         loadBalancer:
+           passHostHeader: true
+           servers:
+             - url: http://<the old server's tailnet address>:80
+   ```
+
+   Traefik watches the directory and picked the file up within seconds. A router
+   for a real host has a longer rule, so it wins over this one.
+
+2. On the new server, send the same request to its own Traefik and to the old
+   server, for each host:
+
+   ```sh
+   curl -H 'Host: app.example.com' http://127.0.0.1:80/
+   curl -H 'Host: app.example.com' http://<the old server's tailnet address>:80/
+   ```
+
+   Five hosts gave the same status and the same body on both, and an unknown
+   host gave 404 on both.
+
+3. Deploy the connector on the new server with the same token. The tunnel then
+   has two connectors and both answer the same, so it does not matter which one
+   takes a request.
+
+4. Stop the connector on the old server. Requests then reach the old server's
+   applications through the new one. Five hosts gave the same status codes
+   through Cloudflare before and after. The new connector's
+   `cloudflared_tunnel_total_requests` counter, on its metrics port, rose with
+   the requests sent.
+
+5. Deploy each application on the new server with its domain as it moves. When
+   the last one has moved, delete the file.
+
 ## Not covered
 
-- A named tunnel with a token and a public hostname, such as `app.example.com`.
 - A Dokploy application routed through the tunnel.
 - cloudflared as a systemd service on the host after a reboot.
-- An application deployed through the Dokploy dashboard after a reboot.
+- An application built from source and deployed through the dashboard, after a
+  reboot. Only the connector, made through the API from an image, was tried.
 - A database that needs more than Docker's stop timeout to shut down cleanly.
 - How long a provider's server takes to boot.
 - Certificates behind the tunnel. Traefik's Let's Encrypt HTTP-01 challenge
