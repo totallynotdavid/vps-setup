@@ -390,16 +390,33 @@ service and every compose container with a restart policy.
 
 ### Copy speed
 
-The tailnet copy was limited by `tailscaled`, which used 100% of one core on the
-receiving server. `ssh` reached about 15 MB/s. Four parallel streams and plain
-TCP both totalled 10 to 14 MB/s. A 40 GB SQLite file that had not changed for
-five weeks went over in 1 GiB chunks, four at a time, with
-`dd skip=N | zstd -1 | ssh | zstd -d | dd seek=N conv=notrunc` into a file
-created with `truncate` at its final size. `zstd -1` compressed a slice of it
-2.55 to 1. The sha256 of the copy equalled the source's. 683,417 small files
-took 47 minutes. A `docker run` client that was killed left its container
-running. Its `tar` wrote the whole stream into the container's log and filled
-the disk. Check with `docker ps` after you stop a copy.
+The tailnet copy was limited by `tailscaled`, which used 100% of one core on
+the receiving server. `ssh` reached about 15 MB/s. Four parallel streams and
+plain TCP both totalled 10 to 14 MB/s.
+
+`rsync -a -z --compress-choice=zstd --compress-level=1 --partial-dir=DIR`
+moved a 40 GB SQLite file at 24-27 MB/s of file data (10-11 MB/s on the wire,
+about 2.2:1) over the same link: 30 minutes for the transfer, plus a parallel
+sha256 check on both ends after. It replaces hand-cut chunking with
+`dd skip=N | zstd | ssh | zstd -d | dd seek=N`: it resumes on its own, and a
+second run against the same destination sends only the changed bytes. While
+it runs, the growing file sits under a hidden temporary name in the
+destination directory, not the final name. rsync-ing a database file while it
+is live can tear it. It is only safe when the file was idle, mtime unchanged
+and WAL empty, before and after, or against a service quiesced first.
+
+For many small files, one reader (`tar`) was disk-bound at about 500
+files/s. Running 8 parallel readers first, `find -print0 | xargs -0 -P 8 -n
+200 cat >/dev/null`, to warm the page cache before `tar` runs took the whole
+job from 47-48 minutes to a few minutes: 683,417 files warmed in about 4
+minutes, then streamed from cache. `ionice` had no effect on a disk whose
+scheduler is `none`: only BFQ honours I/O classes, so check
+`/sys/block/<dev>/queue/scheduler` before relying on it. `nice` still
+throttled CPU regardless of scheduler.
+
+A `docker run` client that was killed left its container running. Its `tar`
+wrote the whole stream into the container's log and filled the disk. Check
+with `docker ps` after you stop a copy.
 
 ## Not covered
 
