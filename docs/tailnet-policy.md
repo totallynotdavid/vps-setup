@@ -62,11 +62,6 @@ the example does with `tag:ops`.
 
 `bin/provision` waits 90 seconds for `ADMIN_USER@name` to answer over the
 tailnet. If the policy does not match your machine, `ssh` fails until the wait
-ends. `bin/provision` then stops with public SSH still open and prints ssh's last
-error line. Check that both rules list your machine's user or tag in `src`, and
-the server's tag in `dst`.
-
-## The test harness
-
-The [end-to-end harness](./testing.md) tags its servers `tag:vps-test`. Use that
-tag in place of `tag:server` for them.
+ends. `bin/provision` then stops with public SSH still open and prints ssh's
+last error line. Check that both rules list your machine's user or tag in `src`,
+and the server's tag in `dst`.
