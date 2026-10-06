@@ -25,11 +25,12 @@ rest is scope it has not grown into yet.
   ufw rate-limits the SSH port.
 - **No way back once it is closed.** There is no command that reopens public
   SSH. `close-ssh` locks root, and recovery is a reinstall from the provider's
-  panel. A reopening path would be a standing way in that the design exists to
-  remove.
+  panel. The design assumes a server can be rebuilt, so it keeps no standing
+  root password. A reopening path would be a standing way in that the design
+  exists to remove.
 - **No secrets in the server script.** `install` takes an auth key as a file
-  path and passes the path on. It never reads the key, and it never puts it in
-  a command line. Minting a key belongs to `bin/resolve-key`, on your machine.
+  path and passes the path on. It never reads the key, and it never puts it in a
+  command line. Minting a key belongs to `bin/resolve-key`, on your machine.
 - **No default node name.** `TS_HOSTNAME` is required. A provider's generated
   host name would otherwise land on your tailnet. The admin user defaults to
   `admin` and there are no default tags, so nothing specific to your tailnet is
@@ -47,10 +48,10 @@ These are gaps, not commitments to never build them.
 - **Other Ubuntu releases.** A new release needs a run of the AWS scenarios on
   it, then an entry in `supported_os` in `lib/os.sh`. See
   [Testing](./testing.md).
-- **Other providers.** The steps have been run on a Contabo server and on AWS EC2
-  servers that start the same way, with root and a password over SSH. Provider
-  images that change users, SSH or the firewall through cloud-init user data
-  have not been tried.
+- **Other providers.** The steps have been run on a Contabo server and on AWS
+  EC2 servers that start the same way, with root and a password over SSH.
+  Provider images that change users, SSH or the firewall through cloud-init user
+  data have not been tried.
 - **The install as cloud-init user data.** A cloud-init file generated from the
   same steps would fit a server that is reinstalled with an auth key. It has not
   been built or run.
