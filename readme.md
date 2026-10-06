@@ -36,23 +36,13 @@ to open it. The last line of the output is the `ssh` command to use from now on.
   published port is open to the internet unless you open it with
   `ufw route allow`. See [Docker on this server](./docs/docker.md).
 - Upgrades the server once, keeps Tailscale updated through apt, and reboots at
-  04:00 when an update needs it. [Inputs](./docs/inputs.md) explains how to
-  turn the reboot off.
+  04:00 when an update needs it. [Inputs](./docs/inputs.md) explains how to turn
+  the reboot off.
 - Logs in as the admin user over the tailnet, and stops there if that fails.
-- Removes OpenSSH and locks the root password.
+- Removes OpenSSH and locks the root password. After that, public SSH cannot be
+  used to access the server. If Tailscale SSH stops working, reinstall the
+  server from the provider's panel.
 - Converges at every step, so running it again is safe.
-
-## Non-goals
-
-- There is no other Ubuntu release.
-- There is no other way in than Tailscale SSH.
-- There is no sshd hardening and no fail2ban.
-- There is no way back in through public SSH once it is closed. If Tailscale SSH
-  stops working, reinstall the server from the provider's panel.
-- It does not install Docker, Dokploy or cloudflared.
-
-[Design boundaries](./docs/design-boundaries.md) gives the reasons for the first
-four, and lists what it has not grown into yet.
 
 ## Documentation
 
