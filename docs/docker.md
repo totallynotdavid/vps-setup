@@ -1,8 +1,8 @@
 # Docker on this server
 
-vps-setup does not install Docker. It makes sure that ufw's promise still
-holds if you install it later: nothing reaches a container from outside the
-tailnet unless you say so.
+vps-setup does not install Docker. It makes sure that ufw's promise still holds
+if you install it later: nothing reaches a container from outside the tailnet
+unless you say so.
 
 ## Why a guard is needed
 
@@ -34,8 +34,8 @@ and a reboot. Without Docker installed, the chain is empty and nothing changes.
 
 - On the server, use `127.0.0.1`: `curl http://127.0.0.1:8080/`.
 - From another machine on the tailnet, use the server's tailnet name or address:
-  `curl http://web1:8080/`. Your [tailnet policy](./tailnet-policy.md) must
-  also allow the port, because a grant lists the ports it opens.
+  `curl http://web1:8080/`. Your [tailnet policy](./tailnet-policy.md) must also
+  allow the port, because a grant lists the ports it opens.
 
 ## Expose a port on purpose
 
@@ -48,8 +48,8 @@ sudo ufw route allow proto tcp from any to any port 80
 The port is the container's port, the one after the colon in `-p 8080:80`,
 because Docker has already rewritten the destination when the guard sees the
 packet. The rule opens that port on every container that listens on it. For a
-Swarm service in ingress mode, allow the published port. Close a port again with
-the same rule after `delete`:
+Swarm service in ingress mode, allow the published port. Close the port again
+with the same rule after `delete`:
 
 ```sh
 sudo ufw route delete allow proto tcp from any to any port 80
@@ -58,10 +58,10 @@ sudo ufw route delete allow proto tcp from any to any port 80
 A Cloudflare Tunnel opens no inbound port. See
 [Dokploy behind a Cloudflare Tunnel](./dokploy.md).
 
-## A bridge with its own name
+## Allow a bridge with its own name
 
-The guard trusts Docker's bridge names. A bridge with any other name is
-blocked. Allow it with:
+The guard trusts Docker's bridge names. A bridge with any other name is blocked.
+Allow it with:
 
 ```sh
 sudo ufw route allow in on <bridge>
@@ -69,23 +69,28 @@ sudo ufw route allow in on <bridge>
 
 ## After a reboot
 
-The server reboots itself after an update that needs it. See
-[Inputs](./inputs.md). `AUTO_REBOOT=off` turns it off.
+The server reboots itself after an update that needs it. `AUTO_REBOOT=off` turns
+it off. See [Inputs](./inputs.md).
 
-This was run on 2026-09-21 on an AWS Ubuntu 26.04 server, after a full `install`
-and `close-ssh`, with Docker 29.8.1 and Dokploy 0.30.7. The reboot was scheduled
+Every container that has to come back needs a restart policy:
+`--restart unless-stopped` for `docker run`, `restart: unless-stopped` in a
+compose file. Docker's default is `no`, which
+`docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' NAME` prints. A
+cloudflared container without a policy stays down, and the tunnel with it, so
+the site is unreachable until someone starts it again. Nothing on a
+Tailscale-only server shows that.
+
+Run on 2026-09-21 on an AWS Ubuntu 26.04 server, after a full `install` and
+`close-ssh`, with Docker 29.8.1 and Dokploy 0.30.7. The reboot was scheduled
 with `shutdown -r +1`, which is how `unattended-upgrades` issues it.
 
 - Containers started with `--restart unless-stopped` were running after the
-  boot: a plain `docker run`, a compose service with
-  `restart: unless-stopped`, and a cloudflared container, which registered a new
-  tunnel connection.
+  boot: a plain `docker run`, a compose service with `restart: unless-stopped`,
+  and a cloudflared container, which registered a new tunnel connection.
 - Containers started with no restart flag stayed `exited`: a plain `docker run`,
   a compose service without `restart:`, and a cloudflared container.
-  `docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' NAME` printed `no` for
-  them, so Docker's default is `no`.
-- Traefik, whose restart policy is `always`, answered 404 on `127.0.0.1:80`
-  15 seconds after boot.
+- Traefik, whose restart policy is `always`, answered 404 on `127.0.0.1:80` 15
+  seconds after boot.
 - Dokploy's own services, which run on Swarm, came back about 26 seconds after a
   reboot, on 24.04 and on 26.04. A snapshot taken 15 seconds after boot still
   showed Swarm services at `0/1`, so give them a minute.
@@ -94,16 +99,8 @@ with `shutdown -r +1`, which is how `unattended-upgrades` issues it.
 - SSH answered again about 20 seconds after the reboot began. A provider's
   server may take longer.
 
-Every container that has to come back needs a restart policy:
-`--restart unless-stopped` for `docker run`, `restart: unless-stopped` in a
-compose file. A cloudflared container without one stays down, and the tunnel
-with it, so the site is unreachable until someone starts it again. Nothing on a
-Tailscale-only server shows that. Start it with `--restart unless-stopped`.
-
 Not covered:
 
-- cloudflared as a systemd service on the host after a reboot.
-- An application deployed through the Dokploy dashboard after a reboot.
 - A database that needs more than Docker's stop timeout to shut down cleanly.
 - How long a provider's server takes to boot.
 

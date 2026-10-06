@@ -3,15 +3,9 @@
 The goal is a server reachable only through Tailscale SSH, reached without ever
 cutting you off. Every ordering rule below follows from that.
 
-`install.sh` has two phases, and `bin/provision` drives both from your machine:
-
-```text
-install     on the server, over root SSH: prepare it, leave public SSH open
-reboot      only if the upgrade asks for it: wait for root SSH to answer again
-verify      from your machine: log in over the tailnet
-close-ssh   on the server, inside that tailnet session: remove public SSH
-verify      from your machine: public SSH is gone, the tailnet still works
-```
+`install.sh` has two phases, `install` and `close-ssh`. `bin/provision` drives
+both from your machine, with checks between them.
+[Get started](./get-started.md#first-run) lists the sequence.
 
 The server has a way in at every point. Until `close-ssh` finishes, root and its
 password still work over public SSH.
@@ -25,9 +19,9 @@ first failure stops the run.
 half-configured server is left. See [Inputs](./inputs.md).
 
 **05 first boot.** A server that has just booted can still be running the
-provider's first-boot setup, whose package upgrade holds the apt locks for a
-few minutes. The step runs `cloud-init status --wait`, which returns when that
-setup is done, and gives up after ten minutes so a stuck provider cannot hang
+provider's first-boot setup, whose package upgrade holds the apt locks for a few
+minutes. The step runs `cloud-init status --wait`, which returns when that setup
+is done, and gives up after ten minutes so a stuck provider cannot hang
 `install`. It ignores the exit status. The Contabo image ends every first boot
 with an error, because its own bootcmd fails, so the status says nothing about
 our install. Without cloud-init it does nothing.
@@ -43,8 +37,8 @@ because that takes no lock, and `dpkg --configure -a` does not wait for one.
 
 Only the first run upgrades. When Tailscale is already installed, the step logs
 one line and does nothing, because upgrading can restart `tailscaled`, which
-ends the Tailscale SSH session that runs the script. `unattended-upgrades`
-keeps the server current from then on.
+ends the Tailscale SSH session that runs the script. `unattended-upgrades` keeps
+the server current from then on.
 
 **10 user.** Tailscale SSH logs you in as a local account, so the admin user
 must exist, with sudo, before the node can be tested. The user has no password.
@@ -73,17 +67,14 @@ comes from `sshd -T`, not from an assumption of 22. `sshd -T` refuses to run
 without `/run/sshd`, and a stopped `ssh.service` leaves none behind, so the
 script creates it first. With sshd absent there is no SSH rule, which is why
 running `install` again after `close-ssh` changes nothing. `ufw --force enable`
-comes last, so the root session that is running the script is never dropped by
-a default-deny with no allow behind it.
+comes last, so the root session that is running the script is never dropped by a
+default-deny with no allow behind it.
 
-**35 docker guard.** Docker publishes container ports with iptables rules that
-run before ufw's input rules, so ufw's deny does not cover containers. The step
-appends a block between `# BEGIN vps-setup docker guard` and
-`# END vps-setup docker guard` to `/etc/ufw/after.rules` and
-`/etc/ufw/after6.rules`. It fills `DOCKER-USER`, the chain Docker runs first:
-new connections into a container are dropped, unless they arrive on loopback,
-the tailnet or a container bridge, or a `ufw route allow` rule accepted them.
-[Docker on this server](./docker.md) has the details and how to open a port.
+**35 docker guard.** The step appends a block between
+`# BEGIN vps-setup docker guard` and `# END vps-setup docker guard` to
+`/etc/ufw/after.rules` and `/etc/ufw/after6.rules`. The block fills
+`DOCKER-USER`, the chain Docker runs first. [Docker on this server](./docker.md)
+says what it filters and how to open a port.
 
 The block lives in `after.rules` because ufw loads that file on every boot and
 `ufw reload`, so the guard is there before Docker is installed, and Docker never
@@ -160,9 +151,9 @@ on `ssh.service`, for each of them that exists. On 24.04, removing
 active and something still listened on port 22, although the package was gone
 and the ufw rule deleted. The socket goes first so that it cannot start the
 service again. Then it runs `apt-get remove` on `openssh-server` and
-`openssh-sftp-server`. It removes and never purges. Tailscale SSH serves the host
-keys in `/etc/ssh/ssh_host_*`. Purging deletes them, the host key changes, and
-every client prints "REMOTE HOST IDENTIFICATION HAS CHANGED". Removing keeps
+`openssh-sftp-server`. It removes and never purges. Tailscale SSH serves the
+host keys in `/etc/ssh/ssh_host_*`. Purging deletes them, the host key changes,
+and every client prints "REMOTE HOST IDENTIFICATION HAS CHANGED". Removing keeps
 them, and the fingerprint clients see stays the same.
 
 **40 root.** It locks the root password with `passwd -l root`. It is last
@@ -185,18 +176,11 @@ After `close-ssh`, the server has:
 leave `sshd-unix-local.socket` listening on a Unix socket. It is not reachable
 from the network.
 
-## Recovery
-
-Until `close-ssh` runs, root and its password work over public SSH. After it,
-there is no public way in. If Tailscale SSH stops working, reinstall the server
-from the provider's panel. The design assumes a server can be rebuilt, so it keeps
-no standing root password.
-
 ## bin/provision
 
 **Verify, then close.** `bin/provision` runs `close-ssh` only after
-`tests/e2e/verify.sh installed` has logged in over the tailnet from your machine,
-so a Tailscale problem shows up while public SSH still exists. It runs
+`tests/e2e/verify.sh installed` has logged in over the tailnet from your
+machine, so a Tailscale problem shows up while public SSH still exists. It runs
 `close-ssh` through that same tailnet session, which is the one place the
 session check accepts.
 
@@ -218,9 +202,9 @@ seconds and gives up after four unanswered ones, so a dead network path stops
 the run in about a minute, with public SSH still open, instead of hanging until
 TCP gives up.
 
-**Root's host key is private to the run.** A reinstalled server keeps its address
-and gets a new host key, so the root host key goes in a temporary file that lasts
-one run. `~/.ssh/known_hosts` is untouched.
+**Root's host key is private to the run.** A reinstalled server keeps its
+address and gets a new host key, so the root host key goes in a temporary file
+that lasts one run. `~/.ssh/known_hosts` is untouched.
 
 **A cold path can be slow.** The first tailnet connection after the firewall
 reload can time out. `bin/provision` waits for the login to work, up to 90
