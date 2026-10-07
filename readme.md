@@ -23,7 +23,14 @@ bin/provision root@203.0.113.7 web1
 `root@203.0.113.7` is where to log in. The address is a placeholder from a range
 reserved for documentation, so use your own server's. `web1` becomes the
 Tailscale node name. Tailscale prints a login URL and waits ten minutes for you
-to open it. The last line of the output is the `ssh` command to use from now on.
+to open it. The last line of the output is the `ssh` command to use from now on:
+
+```text
+ssh admin@web1
+```
+
+[Get started](./docs/get-started.md) lists the requirements and everything the
+run prints.
 
 ## Features
 
@@ -51,4 +58,4 @@ The [manual](./docs/readme.md) indexes every procedure. Start with
 
 ## Contributing
 
-See [contributing.md](./contributing.md).
+See [Contributing](./.github/contributing.md).

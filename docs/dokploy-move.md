@@ -1,8 +1,8 @@
 # Move a Dokploy server
 
 Move a running tunnel's connector and the Dokploy database to a new server
-without downtime. This ran between two Dokploy 0.30.7 servers on one tailnet on
-2026-09-21. [Dokploy behind a Cloudflare Tunnel](./dokploy.md) sets one up.
+without downtime. This was checked between two Dokploy 0.30.7 servers on one
+tailnet. [Dokploy behind a Cloudflare Tunnel](./dokploy.md) sets one up.
 
 The order is:
 

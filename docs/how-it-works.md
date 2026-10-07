@@ -147,14 +147,14 @@ harmless.
 
 **30 openssh.** It first runs `systemctl disable --now` on `ssh.socket` and then
 on `ssh.service`, for each of them that exists. On 24.04, removing
-`openssh-server` did not stop its units: after `close-ssh`, both were still
-active and something still listened on port 22, although the package was gone
-and the ufw rule deleted. The socket goes first so that it cannot start the
-service again. Then it runs `apt-get remove` on `openssh-server` and
-`openssh-sftp-server`. It removes and never purges. Tailscale SSH serves the
-host keys in `/etc/ssh/ssh_host_*`. Purging deletes them, the host key changes,
-and every client prints "REMOTE HOST IDENTIFICATION HAS CHANGED". Removing keeps
-them, and the fingerprint clients see stays the same.
+`openssh-server` does not stop its units: both stay active and something still
+listens on port 22, although the package is gone and the ufw rule deleted. The
+socket goes first so that it cannot start the service again. Then it runs
+`apt-get remove` on `openssh-server` and `openssh-sftp-server`. It removes and
+never purges. Tailscale SSH serves the host keys in `/etc/ssh/ssh_host_*`.
+Purging deletes them, the host key changes, and every client prints "REMOTE HOST
+IDENTIFICATION HAS CHANGED". Removing keeps them, and the fingerprint clients
+see stays the same.
 
 **40 root.** It locks the root password with `passwd -l root`. It is last
 because, with sshd gone, there is nothing left to lock you out of, and if an

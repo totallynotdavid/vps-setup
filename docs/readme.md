@@ -26,6 +26,9 @@
   with `rsync` and parallel `tar`.
 - [How it works](./how-it-works.md): what each step does on the server, and why
   in that order.
-- [Design boundaries](./design-boundaries.md): what the tool will not do.
-- [Testing](./testing.md): the unit tests and the end-to-end harness.
+- [Architecture](./architecture.md): the code map, how `dist/install.sh` is
+  assembled and what each unit test covers.
+- [Testing](./testing.md): the end-to-end harness and its AWS setup.
 - [Releasing](./releasing.md): cut and check a release.
+
+To change the code, start with [Contributing](../.github/contributing.md).

@@ -3,7 +3,7 @@
 Move applications to a new Dokploy server after
 [restoring the Dokploy database](./dokploy-move.md#restore-the-dokploy-database).
 Images and volumes travel separately, see
-[Copy data between servers](./copy-data.md). This ran on 2026-09-21 between two
+[Copy data between servers](./copy-data.md). This was checked between two
 Dokploy 0.30.7 servers.
 
 ## Deploy an image that exists only locally

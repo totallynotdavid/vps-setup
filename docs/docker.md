@@ -80,7 +80,7 @@ cloudflared container without a policy stays down, and the tunnel with it, so
 the site is unreachable until someone starts it again. Nothing on a
 Tailscale-only server shows that.
 
-Run on 2026-09-21 on an AWS Ubuntu 26.04 server, after a full `install` and
+What follows was checked on an Ubuntu 26.04 server after a full `install` and
 `close-ssh`, with Docker 29.8.1 and Dokploy 0.30.7. The reboot was scheduled
 with `shutdown -r +1`, which is how `unattended-upgrades` issues it.
 
@@ -99,13 +99,10 @@ with `shutdown -r +1`, which is how `unattended-upgrades` issues it.
 - SSH answered again about 20 seconds after the reboot began. A provider's
   server may take longer.
 
-Not covered:
-
-- A database that needs more than Docker's stop timeout to shut down cleanly.
-- How long a provider's server takes to boot.
-
 ## What it does not cover
 
+- **A slow shutdown.** A database that needs more than Docker's stop timeout to
+  shut down cleanly was not tried.
 - **Swarm's own ports.** 2377, 7946 and 4789 are host ports, and ufw's input
   rules already block them.
 - **`--network host`.** Such a container listens on the host itself, so ufw's

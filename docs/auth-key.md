@@ -92,7 +92,7 @@ the better route anyway, because the server never sees the long-lived secret.
   is not pre-approved stays held. `tailscale up` prints "To approve your
   machine" and waits. Approve it under Machines in the admin console. `install`
   passes `--timeout=10m` to `tailscale up`, and the steps after it, which
-  include the firewall, have not run. So root and its password still work. This
-  wait was seen on a real tailnet. The timeout itself has not been run.
+  include the firewall, have not run. So root and its password still work. The
+  [harness](./testing.md#what-it-does-not-cover) does not run this case.
 - **A bad key.** `install` stops at `tailscale up` with `invalid key`, before
   the firewall step. Root and its password still work.
