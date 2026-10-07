@@ -4,7 +4,10 @@
 
 - A server on a supported Ubuntu release (the [readme](../readme.md) lists
   them), and root access to it over SSH. Other releases are refused before
-  anything changes.
+  anything changes. The steps assume a server that starts with root and a
+  password. They have run on a Contabo server and on AWS EC2 servers set up to
+  start that way. An image that changes users, SSH or the firewall through
+  cloud-init user data has not been tried.
 - A Linux machine on the same tailnet, with `bash`, OpenSSH and `curl`. `curl`
   mints a key from an OAuth client, see [Auth key](./auth-key.md).
 - A tailnet policy that lets that machine SSH to the server as the admin user.
