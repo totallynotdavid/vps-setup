@@ -1,8 +1,9 @@
 # Testing
 
 `mise run check` needs nothing beyond the tools in `mise.toml`, and it is what
-CI runs. It cannot prove the phases, which only mean something on a real server.
-The end-to-end harness does that, so it is not part of `check`.
+CI runs. [Architecture](./architecture.md#tests) lists the unit tests it runs.
+They cannot prove the phases, which only mean something on a real server. The
+end-to-end harness does that, so it is not part of `check`.
 
 ## The scripts
 
@@ -110,27 +111,14 @@ The server image comes from Canonical's AMI parameter under
 `/aws/service/canonical/ubuntu/server/`. Canonical publishes it under `ebs-gp2`
 for 20.04 and 22.04 and under `ebs-gp3` for 24.04 and 26.04, never both.
 `tests/e2e/aws/main.tf` picks the segment with the local `ebs_type`: `ebs-gp2`
-for 20.04 and 22.04, `ebs-gp3` for any other release. The newest 20.04 image was
-built in June 2025 and the newest 22.04 image in September 2026.
+for 20.04 and 22.04, `ebs-gp3` for any other release.
 
-### What has been verified
-
-All measured on 2026-09-21, on AWS EC2 in `us-east-1` with a `t3.micro`:
-
-| Release | `run`  | `refuse` | `docker` |
-| ------- | ------ | -------- | -------- |
-| 20.04   | passed | passed   | passed   |
-| 22.04   | passed | passed   | passed   |
-| 24.04   | passed | passed   | passed   |
-| 26.04   | passed | passed   | passed   |
+### Scenarios
 
 `run` checks the installed state, the closed state, and the closed state again
-after a reboot. `refuse` checks the refusal. `docker` checks the guard. The
-first 24.04 run failed after `close-ssh`, because removing OpenSSH left
-`ssh.socket` and `ssh.service` active.
-[How it works](./how-it-works.md#close-ssh) says what step 30 does about that.
-On 20.04 Docker's install script fails on a package Docker no longer ships for
-that release, so `docker.sh` installs the engine packages by name.
+after a reboot. `refuse` checks the refusal. `docker` checks the guard. On 20.04
+Docker's install script fails on a package Docker no longer ships for that
+release, so `docker.sh` installs the engine packages by name.
 
 The generated root password is kept only in Terraform state under
 `tests/e2e/aws/`, which is gitignored. It reaches SSH through `SSH_ASKPASS` and

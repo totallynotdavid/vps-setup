@@ -1,7 +1,7 @@
 # Copy data between servers
 
 Copy images, volumes and large files to a new Dokploy server. The numbers are
-from copies between two servers on one tailnet on 2026-09-21.
+from copies between two servers on one tailnet.
 
 ## Copy images
 

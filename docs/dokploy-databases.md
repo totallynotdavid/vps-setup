@@ -1,7 +1,7 @@
 # Move a Postgres database
 
 Move an application's Postgres database to a new server with its roles and
-grants. This ran on 2026-09-21.
+grants.
 
 `pg_dump` dumps one database. The roles of the cluster and the grants on its
 tables are not part of it, and restoring with `--no-privileges` drops the

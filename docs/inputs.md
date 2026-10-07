@@ -24,10 +24,10 @@ reboots the server after an update that needs it. It does not reboot every day.
 The server's clock follows the server's timezone. vps-setup does not set one, so
 the server keeps the zone its provider gives it, from the image or from
 cloud-init data. Check it with `timedatectl`. The zone says nothing about where
-the server is: on 2026-09-21 a Contabo server in the United States and one in
-Germany both had `Europe/Berlin`, set by cloud-init data. That zone follows
-daylight saving time, so a fixed `HH:MM` moves by an hour against UTC twice a
-year. `sudo timedatectl set-timezone UTC` pins it. On a UTC server,
+the server is: a Contabo server in the United States and one in Germany both had
+`Europe/Berlin`, set by cloud-init data. That zone follows daylight saving time,
+so a fixed `HH:MM` moves by an hour against UTC twice a year.
+`sudo timedatectl set-timezone UTC` pins it. On a UTC server,
 `AUTO_REBOOT=09:00` is 04:00 at UTC-5.
 
 `install.sh` takes exactly one argument: `install` or `close-ssh`. `-h` and

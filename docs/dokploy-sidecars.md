@@ -1,7 +1,7 @@
 # Move a Tailscale Service sidecar
 
 Move a Tailscale Service host to a new server without changing its name or
-address. This ran on 2026-09-21.
+address.
 
 A database was served to other servers through a Tailscale Service. A sidecar
 container that shares the Postgres container's network namespace advertised it.

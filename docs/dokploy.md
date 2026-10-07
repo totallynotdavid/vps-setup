@@ -5,12 +5,11 @@ behind a Cloudflare Tunnel. vps-setup does not install Docker, Dokploy or
 cloudflared. A server set up another way has neither the guard nor the results
 below.
 
-Everything here ran on an AWS Ubuntu server on 2026-09-21, after a full
-`install` and `close-ssh`. The install steps, the dashboard check and a named
-tunnel also ran on a Contabo server with Ubuntu 26.04 the same day. The versions
-are Dokploy 0.30.7, cloudflared 2026.9.1 and the packages in Docker's
-repositories on that day. Dokploy's installer is a third-party script and will
-change.
+Everything here was checked on an AWS Ubuntu server after a full `install` and
+`close-ssh`. The install steps, the dashboard check and a named tunnel were also
+checked on a Contabo server with Ubuntu 26.04. The versions are Dokploy 0.30.7,
+cloudflared 2026.9.1. The Docker versions are named where they matter, in the
+next section. Dokploy's installer is a third-party script and changes.
 
 Run vps-setup first, then install Docker and Dokploy. The Docker guard of step
 35 was in place before Docker in every run. See
@@ -23,9 +22,10 @@ Dokploy 0.30.7's installer installs Docker 28.5.0 through
 `docker-ce-rootless-extras` with `apt-mark hold`. It skips its Docker step when
 `docker` is already there.
 
-Docker's apt repository for 26.04 carries only 29.3.1 to 29.8.1 (listed
-2026-09-21). The repository for 24.04 carries 28.5.0. So the installer's pinned
-Docker cannot install on a bare 26.04.
+With Dokploy 0.30.7, Docker's apt repository for 26.04 offered only 29.3.1 to
+29.8.1, and the one for 24.04 offered 28.5.0. So the installer's pinned Docker
+cannot install on a bare 26.04. `apt-cache madison docker-ce`, run after
+Docker's repository is added, lists what the repository offers now.
 
 - **24.04.** The installer alone worked, with its own Docker 28.5.0.
 - **26.04.** Install Docker first:
