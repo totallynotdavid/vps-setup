@@ -1,0 +1,210 @@
+#!/usr/bin/env bash
+# Moves the Dokploy database from one Dokploy server to another, with what a bare
+# restore leaves behind: the encryption keys, and two settings that must not
+# survive. It runs on the operator's machine and logs in to both servers.
+set -euo pipefail
+
+repo=$(cd "$(dirname "$0")/.." && pwd)
+
+print_usage() {
+	cat <<'EOF_USAGE'
+usage: move-dokploy [--via NAME] OLD NEW
+
+  OLD, NEW  the two servers, as ssh names them; ssh must log in without a prompt
+  --via     how OLD reaches NEW, if it is not NEW (default: NEW). The database
+            travels from OLD to NEW directly, never through this machine.
+
+Both servers must run the same Dokploy image. On NEW it
+  1. dumps the Dokploy database to ~/dokploy-before-move-<time>.dump on NEW, the
+     way back,
+  2. stops the dashboard, replaces the database with OLD's and checks the copy,
+  3. adds OLD's encryption keys to /etc/dokploy/encryption.key,
+  4. clears the dashboard's domain and turns the daily Docker cleanup off,
+  5. starts the dashboard and checks that its log shows no decryption failure,
+  6. lists the domains that have no Traefik router file yet.
+Only the dashboard stops; Traefik and the tunnel connector keep running. Once the
+images are on NEW, turn the daily cleanup back on in the dashboard.
+EOF_USAGE
+}
+
+usage() {
+	print_usage >&2
+	exit 2
+}
+
+log() {
+	printf '==> %s\n' "$*" >&2
+}
+
+die() {
+	printf 'error: %s\n' "$*" >&2
+	exit 1
+}
+
+via=
+args=()
+while (($#)); do
+	case $1 in
+	--via)
+		(($# >= 2)) || usage
+		via=$2
+		shift 2
+		;;
+	-h | --help)
+		print_usage
+		exit 0
+		;;
+	-*) usage ;;
+	*)
+		args+=("$1")
+		shift
+		;;
+	esac
+done
+((${#args[@]} == 2)) || usage
+old=${args[0]} new=${args[1]}
+via=${via:-$new}
+
+host_re='^[A-Za-z0-9][A-Za-z0-9_.@-]*$'
+for value in "$old" "$new" "$via"; do
+	[[ $value =~ $host_re ]] || die "'$value' is not a plain host name"
+done
+
+# Run every remote Docker command through the server's Docker client, with sudo when
+# the SSH user does not have direct access.
+on() {
+	local host=$1
+	shift
+	ssh -o BatchMode=yes -o ConnectTimeout=15 "$host" "$@"
+}
+docker_on() {
+	local host=$1
+	on "$host" 'docker info >/dev/null 2>&1 && echo docker || echo "sudo -n docker"' </dev/null ||
+		die "could not log in to $host over ssh without a prompt"
+}
+old_docker=$(docker_on "$old")
+new_docker=$(docker_on "$new")
+on "$old" "$old_docker info >/dev/null" </dev/null || die "Docker is not usable on $old"
+on "$new" "$new_docker info >/dev/null" </dev/null || die "Docker is not usable on $new"
+
+# The dashboard and its database are Swarm services. Their task names carry a suffix.
+container_of() {
+	local host=$1 docker=$2 service=$3 names
+	names=$(on "$host" "$docker ps --filter 'name=^$service\\.1\\.' --format '{{.Names}}'" </dev/null) ||
+		die "could not list the containers of '$service' on $host"
+	[[ -n $names && $names != *$'\n'* ]] || die "expected one running container of the service '$service' on $host"
+	printf '%s\n' "$names"
+}
+old_dashboard=$(container_of "$old" "$old_docker" dokploy)
+new_dashboard=$(container_of "$new" "$new_docker" dokploy)
+old_postgres=$(container_of "$old" "$old_docker" dokploy-postgres)
+new_postgres=$(container_of "$new" "$new_docker" dokploy-postgres)
+
+image_of() {
+	on "$1" "$2 inspect --format '{{.Config.Image}}' $3" </dev/null
+}
+old_image=$(image_of "$old" "$old_docker" "$old_dashboard")
+new_image=$(image_of "$new" "$new_docker" "$new_dashboard")
+[[ $old_image == "$new_image" ]] || die "the servers run different Dokploy images ($old: $old_image, $new: $new_image); upgrade one first"
+
+psql_new() {
+	on "$new" "$new_docker exec -i $new_postgres psql -U dokploy -d dokploy -v ON_ERROR_STOP=1 -X -q -At"
+}
+
+log "dump the database on $new first, the way back"
+way_back=dokploy-before-move-$(date +%Y%m%d-%H%M%S).dump
+on "$new" "umask 077 && $new_docker exec $new_postgres pg_dump -U dokploy -Fc dokploy > $way_back" </dev/null
+
+dashboard_stopped=0
+restart_hint() {
+	if ((dashboard_stopped)); then
+		cat >&2 <<EOF_HINT
+The dashboard on $new is stopped or stopping. To go back to what it held before:
+  ssh $new '$new_docker exec -i $new_postgres pg_restore -U dokploy -d dokploy --clean --if-exists --no-owner --no-privileges < ~/$way_back'
+  ssh $new '$new_docker service scale dokploy=1'
+EOF_HINT
+	fi
+}
+trap restart_hint EXIT
+
+log "stop the dashboard on $new"
+dashboard_stopped=1
+on "$new" "$new_docker service scale dokploy=0" </dev/null >&2
+# scale returns when the service is updated, not when its task has exited. A failed
+# listing is an error, not an empty list.
+deadline=$((SECONDS + 120))
+until
+	running=$(on "$new" "$new_docker ps -q --filter 'name=^dokploy\\.1\\.'" </dev/null) ||
+		die "could not list the dashboard's containers on $new"
+	[[ -z $running ]]
+do
+	((SECONDS < deadline)) || die "the dashboard on $new did not stop within two minutes"
+	sleep 2
+done
+
+log "replace the database on $new with the one on $old"
+# Use --no-roles because the new server's dokploy role has its own password.
+on "$old" "bash -s -- --user dokploy --replace --no-roles $old_postgres dokploy $via $new_postgres" <"$repo/bin/move-postgres"
+
+log "copy the encryption keys"
+# Importing the module prints a line of text too; a key is 64 hex characters.
+key_output=$(on "$old" "$old_docker exec $old_dashboard node -e 'import(\"@dokploy/server/dist/lib/encryption.js\").then(m => console.log(m.exportEncryptionKeys()))'" </dev/null) ||
+	die "could not run the key export in $old_dashboard on $old"
+keys=$(grep -E '^[0-9a-f]{64}$' <<<"$key_output" || true)
+[[ -n $keys ]] || die "$old_dashboard printed no encryption key"
+# Only hex got through the filter, so the keys are safe in a command line.
+key_file=/etc/dokploy/encryption.key
+on "$new" "sudo -n bash -c 'set -euo pipefail; touch $key_file; chmod 600 $key_file; chown root:root $key_file; for key in ${keys//$'\n'/ }; do grep -qx \$key $key_file || echo \$key >>$key_file; done'" </dev/null
+log "$(grep -c '' <<<"$keys") key(s) are in $key_file on $new"
+
+log "clear the dashboard's domain and turn the daily cleanup off"
+psql_new <<'EOF_SQL'
+update "webServerSettings" set host = null, "enableDockerCleanup" = false;
+EOF_SQL
+
+log "start the dashboard on $new"
+on "$new" "$new_docker service scale dokploy=1" </dev/null >&2
+dashboard_stopped=0
+deadline=$((SECONDS + 120))
+# The name filter also matches dokploy-postgres, so the line is picked here.
+until
+	replicas=$(on "$new" "$new_docker service ls --filter name=dokploy --format '{{.Name}} {{.Replicas}}'" </dev/null) ||
+		die "could not list the services on $new"
+	grep -qx 'dokploy 1/1' <<<"$replicas"
+do
+	((SECONDS < deadline)) || die "the dashboard on $new did not start within two minutes"
+	sleep 3
+done
+sleep 15
+dashboard_log=$(on "$new" "$new_docker service logs --since 3m dokploy 2>&1" </dev/null) ||
+	die "could not read the dashboard log on $new"
+failures=$(grep -c 'Failed to decrypt' <<<"$dashboard_log" || true)
+((failures == 0)) || die "the dashboard on $new logged $failures decryption failure(s); the keys did not match"
+
+log "look for domains without a Traefik router file"
+missing=$(
+	psql_new <<'EOF_SQL'
+select coalesce(a."appName", c."appName") || '|' || d.host
+from domain d
+left join application a on a."applicationId" = d."applicationId"
+left join compose c on c."composeId" = d."composeId"
+where d."domainType" <> 'preview'
+order by 1
+EOF_SQL
+)
+router_missing=()
+while IFS='|' read -r app_name host; do
+	[[ -n $app_name ]] || continue
+	router_status=0
+	on "$new" "test -f '/etc/dokploy/traefik/dynamic/${app_name//\'/\'\\\'\'}.yml'" </dev/null || router_status=$?
+	case $router_status in
+	0) ;;
+	1) router_missing+=("$host ($app_name)") ;;
+	*) die "could not look for the router file of $app_name on $new (exit $router_status)" ;;
+	esac
+done <<<"$missing"
+if ((${#router_missing[@]} > 0)); then
+	printf 'no router file on %s yet; save each domain once in the dashboard to write it:\n' "$new" >&2
+	printf '  %s\n' "${router_missing[@]}" >&2
+fi
+log "moved the Dokploy database; the way back is ~/$way_back on $new"
