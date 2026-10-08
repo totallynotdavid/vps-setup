@@ -6,8 +6,8 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/../.."
-# shellcheck source-path=SCRIPTDIR/../..
-source tests/e2e/known-hosts.sh
+# shellcheck source-path=SCRIPTDIR/../../bin/lib
+source bin/lib/known-hosts.sh
 
 usage() {
 	echo "usage: run.sh <root@host> <name> [--key FILE]" >&2
@@ -44,7 +44,7 @@ target=${args[0]} name=${args[1]}
 
 admin=${ADMIN_USER:-admin}
 public_ip=${target#*@}
-known_hosts=$(e2e_known_hosts "$name")
+known_hosts=$(known_hosts_file "$name")
 remote_env=$(printf 'ADMIN_USER=%q TS_HOSTNAME=%q TS_TAGS=%q AUTO_REBOOT=%q' "$admin" "$name" "${TS_TAGS:-}" "${AUTO_REBOOT:-}")
 
 tailnet_ssh() {
@@ -98,4 +98,4 @@ tailnet_ssh 'sudo systemctl reboot' || true
 wait_for_reboot "$boot_id" || fail "$name did not come back within two minutes"
 
 log "verify SSH is still closed"
-tests/e2e/verify.sh closed "$name" "$admin" "$public_ip"
+bin/verify closed "$name" "$admin" "$public_ip"

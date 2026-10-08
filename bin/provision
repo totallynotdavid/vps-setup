@@ -4,9 +4,9 @@
 set -euo pipefail
 
 repo=$(cd "$(dirname "$0")/.." && pwd)
-# shellcheck source=tests/e2e/known-hosts.sh
-# shellcheck source-path=SCRIPTDIR/..
-source "$repo/tests/e2e/known-hosts.sh"
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=lib/known-hosts.sh
+source "$repo/bin/lib/known-hosts.sh"
 
 print_usage() {
 	cat <<'EOF_USAGE'
@@ -111,7 +111,7 @@ trap 'exit 143' TERM
 
 wait_for_tailnet() {
 	local deadline=$((SECONDS + 90)) err
-	# Only a reachability probe: verify.sh learns and checks the host key.
+	# This probe waits for reachability. bin/verify handles host-key checking.
 	until err=$(ssh -n -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no \
 		-o UserKnownHostsFile=/dev/null -o LogLevel=ERROR "$admin@$name" true 2>&1); do
 		((SECONDS < deadline)) || {
@@ -177,17 +177,17 @@ log "wait for $admin@$name on the tailnet"
 wait_for_tailnet
 
 log "verify the tailnet path"
-"$repo/tests/e2e/verify.sh" installed "$name" "$admin" "$public_ip" ||
+"$repo/bin/verify" installed "$name" "$admin" "$public_ip" ||
 	die "verification failed; public SSH is still open and nothing was closed"
 
 log "close SSH through the tailnet session"
 ssh -o BatchMode=yes -o ConnectTimeout=15 -o StrictHostKeyChecking=yes \
-	-o "UserKnownHostsFile=$(e2e_known_hosts "$name")" \
+	-o "UserKnownHostsFile=$(known_hosts_file "$name")" \
 	"$admin@$name" 'sudo bash -s close-ssh' <"$repo/dist/install.sh" ||
 	die "close-ssh failed; the output above says where, and running it again is safe"
 
 log "verify SSH is closed"
-"$repo/tests/e2e/verify.sh" closed "$name" "$admin" "$public_ip" ||
+"$repo/bin/verify" closed "$name" "$admin" "$public_ip" ||
 	die "verification after close-ssh failed"
 
 printf 'ssh %s@%s\n' "$admin" "$name"
