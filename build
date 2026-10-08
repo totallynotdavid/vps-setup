@@ -1,10 +1,23 @@
 #!/usr/bin/env bash
-# Concatenates the fragments into dist/install.sh. Only definitions precede the
-# final `main "$@"`, so a truncated download runs nothing.
+# Concatenates the fragments into dist/install.sh. Only definitions and the two
+# step lists precede the final `main "$@"`, so a truncated download runs nothing.
 set -euo pipefail
 
 cd "$(dirname "$0")"
 export LC_ALL=C
+
+# The step order is the file order: steps/install/20-tailscale.sh names the step
+# install_20_tailscale, and steps/close-ssh/10-session.sh names close_ssh_10_session.
+write_steps() {
+	local phase=$1 file name
+	printf '\n%s_steps=(\n' "$phase"
+	for file in "steps/${phase//_/-}"/*.sh; do
+		name=${file##*/}
+		name=${name%.sh}
+		printf '\t%s_%s\n' "$phase" "${name//-/_}"
+	done
+	printf ')\n'
+}
 
 mkdir -p dist
 {
@@ -13,6 +26,8 @@ mkdir -p dist
 		printf '\n# %s\n' "$file"
 		cat "$file"
 	done
+	write_steps install
+	write_steps close_ssh
 	printf '\nmain "$@"\n'
 } >dist/install.sh
 
