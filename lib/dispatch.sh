@@ -16,11 +16,10 @@ EOF_USAGE
 }
 
 run_phase() {
-	local phase=$1 step steps
+	local step
 	require_supported_os
 	require_root
-	mapfile -t steps < <(compgen -A function "${phase}_" | sort)
-	for step in "${steps[@]}"; do
+	for step in "$@"; do
 		log "$step"
 		"$step"
 	done
@@ -32,8 +31,8 @@ main() {
 		exit 2
 	fi
 	case $1 in
-	install) run_phase install ;;
-	close-ssh) run_phase close_ssh ;;
+	install) run_phase "${install_steps[@]}" ;;
+	close-ssh) run_phase "${close_ssh_steps[@]}" ;;
 	-h | --help) usage ;;
 	*)
 		usage >&2

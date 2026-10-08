@@ -1,0 +1,117 @@
+#!/usr/bin/env bash
+# Copies Docker images from this server to another and checks the layers. With
+# --registry it also publishes them from a registry on the other server's loopback
+# address, which is how Dokploy deploys an image that exists nowhere else.
+# It runs on the source server, so the data goes straight to the new server:
+#   ssh old 'bash -s -- [options] HOST IMAGE...' < bin/copy-image
+set -euo pipefail
+
+print_usage() {
+	cat <<'EOF_USAGE'
+usage: copy-image [--registry [--port PORT]] HOST IMAGE...
+
+  HOST        the new server, as ssh names it; ssh must log in without a prompt
+  IMAGE       an image on this server, as name:tag
+  --registry  also run a registry on HOST's loopback address and push each image
+              to it; prints the name to set as the application's image
+  --port      the registry's port (default: 5000)
+
+Each image's layer list must match on both servers. Image IDs differ between a
+classic image store and a containerd store, so the layers are what is compared.
+EOF_USAGE
+}
+
+usage() {
+	print_usage >&2
+	exit 2
+}
+
+log() {
+	printf '==> %s\n' "$*" >&2
+}
+
+die() {
+	printf 'error: %s\n' "$*" >&2
+	exit 1
+}
+
+registry=0 port=5000
+args=()
+while (($#)); do
+	case $1 in
+	--registry)
+		registry=1
+		shift
+		;;
+	--port)
+		(($# >= 2)) || usage
+		port=$2
+		shift 2
+		;;
+	-h | --help)
+		print_usage
+		exit 0
+		;;
+	-*) usage ;;
+	*)
+		args+=("$1")
+		shift
+		;;
+	esac
+done
+((${#args[@]} >= 2)) || usage
+host=${args[0]}
+images=("${args[@]:1}")
+
+image_re='^[a-z0-9][a-z0-9._/-]*:[A-Za-z0-9_][A-Za-z0-9_.-]*$'
+port_re='^[0-9]+$'
+for image in "${images[@]}"; do
+	[[ $image =~ $image_re ]] || die "'$image' is not a name:tag"
+done
+[[ $port =~ $port_re ]] || die "'$port' is not a port"
+
+docker_cmd=(docker)
+docker info &>/dev/null || docker_cmd=(sudo -n docker)
+"${docker_cmd[@]}" info &>/dev/null || die "this server's Docker is not usable by this user"
+remote_ssh() {
+	ssh -o BatchMode=yes -o ConnectTimeout=15 "$host" "$@"
+}
+remote_docker=$(remote_ssh 'docker info >/dev/null 2>&1 && echo docker || echo "sudo -n docker"' </dev/null) ||
+	die "could not log in to $host over ssh without a prompt"
+
+for image in "${images[@]}"; do
+	"${docker_cmd[@]}" image inspect "$image" &>/dev/null || die "image '$image' does not exist on this server"
+done
+
+layers='{{json .RootFS.Layers}}'
+
+log "copy ${#images[@]} image(s) to $host"
+"${docker_cmd[@]}" save "${images[@]}" | gzip -1 | remote_ssh "gunzip | $remote_docker load" >&2
+
+log "compare the layers"
+for image in "${images[@]}"; do
+	here=$("${docker_cmd[@]}" image inspect --format "$layers" "$image")
+	there=$(remote_ssh "$remote_docker image inspect --format '$layers' $image" </dev/null) ||
+		die "$image is not on $host after the copy"
+	[[ $here == "$there" ]] || die "$image has different layers on $host"
+done
+
+if ((! registry)); then
+	log "copied and verified ${#images[@]} image(s)"
+	exit 0
+fi
+
+# A registry on 127.0.0.1 is allowed over HTTP, so the application can pull from it.
+log "publish through a registry on 127.0.0.1:$port of $host"
+registry_name=registry-$port
+remote_ssh "$remote_docker inspect $registry_name >/dev/null 2>&1 || $remote_docker run -d --name $registry_name --restart unless-stopped -p 127.0.0.1:$port:5000 -v $registry_name:/var/lib/registry registry:3 >/dev/null" </dev/null
+deadline=$((SECONDS + 30))
+until remote_ssh "wget -qO /dev/null http://127.0.0.1:$port/v2/ 2>/dev/null || curl -fsS -o /dev/null http://127.0.0.1:$port/v2/ 2>/dev/null" </dev/null; do
+	((SECONDS < deadline)) || die "the registry on $host:$port did not answer"
+	sleep 1
+done
+for image in "${images[@]}"; do
+	remote_ssh "$remote_docker tag $image 127.0.0.1:$port/$image && $remote_docker push -q 127.0.0.1:$port/$image >/dev/null" </dev/null
+	printf '127.0.0.1:%s/%s\n' "$port" "$image"
+done
+log "copied, verified and published ${#images[@]} image(s); set the printed name as the image and turn automatic deploys off"

@@ -17,22 +17,37 @@ export TS_TAGS
 export TS_EPHEMERAL=1
 export TF_VAR_region=$region
 
+scenarios=(run refuse docker sidecar login)
+# The login scenario waits out the ten-minute join timeout and does not depend on
+# the Ubuntu release.
+release_scenarios=(run refuse docker sidecar)
+
+is_scenario() {
+	local scenario
+	for scenario in "${scenarios[@]}"; do
+		[[ $1 == "$scenario" ]] && return 0
+	done
+	return 1
+}
+
 print_usage() {
 	cat <<'EOF_USAGE'
-usage: aws.sh up | run | refuse | docker | down | sweep | all [scenario...] | releases
+usage: aws.sh up | run | refuse | docker | sidecar | login | down | sweep | all [scenario...] | releases
 
   up        create the server and wait until root and its password work; prints its public IP
   run       tests/e2e/run.sh against that server
   refuse    tests/e2e/refuse-close.sh against that server
   docker    tests/e2e/docker.sh against that server
+  sidecar   tests/e2e/sidecar.sh against that server
+  login     tests/e2e/login-url.sh against that server; takes about 15 minutes and needs no key
   down      destroy the server; safe to repeat
   sweep     terminate leftovers older than two hours, in case a run crashed
-  all       for each scenario named (default: run refuse docker): up, scenario, down; always destroys
-  releases  all once per supported Ubuntu release; one result line each, exits 1 if any failed
+  all       for each scenario named (default: every scenario): up, scenario, down; always destroys
+  releases  all, without login, once per supported Ubuntu release; one result line each, exits 1 if any failed
 
 environment:
   AWS_PROFILE        or AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY; for every command
-  TS_TEST_KEY_FILE   file holding an OAuth client secret or an auth key; for run, refuse, docker and all
+  TS_TEST_KEY_FILE   file holding an OAuth client secret or an auth key; for every scenario but login
   ADMIN_USER         admin account to create (default: admin)
   TS_TAGS            tags of the key or client (default: tag:vps-test)
   AWS_REGION         region (default: us-east-1)
@@ -154,18 +169,32 @@ cmd_up() {
 	printf '%s\n' "$ip"
 }
 
-cmd_run() {
-	local ip run_id
+run_scenario() {
+	local script=$1 ip run_id
+	shift
 	ip=$(server_output public_ip)
 	run_id=$(server_output run_id)
-	with_root_password "$repo/tests/e2e/run.sh" "root@$ip" "e2e-$run_id" --key "$TS_TEST_KEY_FILE"
+	with_root_password "$repo/tests/e2e/$script" "root@$ip" "e2e-$run_id" "$@"
+}
+
+cmd_run() {
+	run_scenario run.sh --key "$TS_TEST_KEY_FILE"
 }
 
 cmd_refuse() {
-	local ip run_id
-	ip=$(server_output public_ip)
-	run_id=$(server_output run_id)
-	with_root_password "$repo/tests/e2e/refuse-close.sh" "root@$ip" "e2e-$run_id" --key "$TS_TEST_KEY_FILE"
+	run_scenario refuse-close.sh --key "$TS_TEST_KEY_FILE"
+}
+
+cmd_docker() {
+	run_scenario docker.sh --key "$TS_TEST_KEY_FILE"
+}
+
+cmd_sidecar() {
+	run_scenario sidecar.sh --key "$TS_TEST_KEY_FILE"
+}
+
+cmd_login() {
+	run_scenario login-url.sh
 }
 
 # Destroying only reads the state, so the two required variables take placeholders.
@@ -239,16 +268,9 @@ teardown_on_exit() {
 	exit "$status"
 }
 
-cmd_docker() {
-	local ip run_id
-	ip=$(server_output public_ip)
-	run_id=$(server_output run_id)
-	with_root_password "$repo/tests/e2e/docker.sh" "root@$ip" "e2e-$run_id" --key "$TS_TEST_KEY_FILE"
-}
-
 cmd_all() {
 	local scenario ip failed=()
-	(($# > 0)) || set -- run refuse docker
+	(($# > 0)) || set -- "${scenarios[@]}"
 	trap teardown_on_exit EXIT
 	trap 'exit 130' INT
 	trap 'exit 143' TERM
@@ -277,7 +299,7 @@ cmd_releases() {
 	for supported in "${releases[@]}"; do
 		release=${supported#* }
 		log "release $release"
-		if UBUNTU_VERSION=$release "$self" all; then
+		if UBUNTU_VERSION=$release "$self" all "${release_scenarios[@]}"; then
 			printf 'release %s: passed\n' "$release"
 		else
 			printf 'release %s: FAILED\n' "$release"
@@ -297,14 +319,20 @@ case $1 in
 up | down | sweep)
 	require_inputs 0
 	;;
-run | refuse | docker | releases)
+login)
+	require_inputs 0
+	;;
+run | refuse | docker | sidecar | releases)
 	require_inputs 1
 	;;
 all)
+	needs_key=0
 	for scenario in "${@:2}"; do
-		[[ $scenario == run || $scenario == refuse || $scenario == docker ]] || usage
+		is_scenario "$scenario" || usage
+		[[ $scenario == login ]] || needs_key=1
 	done
-	require_inputs 1
+	(($# > 1)) || needs_key=1
+	require_inputs "$needs_key"
 	;;
 *) usage ;;
 esac

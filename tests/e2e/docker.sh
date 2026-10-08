@@ -7,8 +7,10 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/../.."
+# shellcheck source-path=SCRIPTDIR/../../bin/lib
+source bin/lib/known-hosts.sh
 # shellcheck source-path=SCRIPTDIR/../..
-source tests/e2e/known-hosts.sh
+source tests/e2e/install-docker.sh
 
 usage() {
 	echo "usage: docker.sh <root@host> <name> --key FILE" >&2
@@ -45,7 +47,7 @@ target=${args[0]} name=${args[1]}
 
 admin=${ADMIN_USER:-admin}
 public_ip=${target#*@}
-known_hosts=$(e2e_known_hosts "$name")
+known_hosts=$(known_hosts_file "$name")
 
 # The RFC 5737 and ULA ranges below stand in for the public internet.
 host_v4=203.0.113.1 client_v4=203.0.113.2
@@ -155,24 +157,6 @@ ip netns exec ext ip link set lo up
 REMOTE
 }
 
-install_docker() {
-	# On a release Docker no longer ships every package for (20.04), the script sets
-	# up the repository and then fails on a missing plugin, so the engine is installed
-	# by name. unattended-upgrades can hold the apt locks and its daemon never exits,
-	# so the install is tried again instead of waited for.
-	tailnet_ssh 'sudo bash -s' <<'REMOTE'
-set -euo pipefail
-mkdir -p /etc/docker
-printf '%s\n' '{"ipv6": true, "fixed-cidr-v6": "fd00:d0c::/64", "ip6tables": true}' >/etc/docker/daemon.json
-curl -fsSL https://get.docker.com | sh && exit 0
-for _ in 1 2 3; do
-	sleep 30
-	DEBIAN_FRONTEND=noninteractive apt-get install -y -qq docker-ce docker-ce-cli containerd.io && exit 0
-done
-exit 1
-REMOTE
-}
-
 # The plain container restarts after a reboot, so its port is still there to test.
 start_containers() {
 	local private_ip
@@ -258,6 +242,6 @@ wait_for_containers
 check_refused "after a reboot"
 
 log "verify the closed state, guard included"
-tests/e2e/verify.sh closed "$name" "$admin" "$public_ip" || failures=$((failures + 1))
+bin/verify closed "$name" "$admin" "$public_ip" || failures=$((failures + 1))
 
 ((failures == 0))

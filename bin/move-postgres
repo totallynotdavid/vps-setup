@@ -1,0 +1,192 @@
+#!/usr/bin/env bash
+# Moves one Postgres database, with its roles and grants, from a container on
+# this server to a container on another and checks the copy.
+# It runs on the source server, so the dump goes straight to the new server:
+#   ssh old 'bash -s -- [options] SOURCE DATABASE HOST DEST' < bin/move-postgres
+set -euo pipefail
+
+print_usage() {
+	cat <<'EOF_USAGE'
+usage: move-postgres [--user USER] [--replace] [--no-roles] SOURCE DATABASE HOST DEST
+
+  SOURCE     Postgres container on this server
+  DATABASE   database to move
+  HOST       the new server, as ssh names it; ssh must log in without a prompt
+  DEST       Postgres container on HOST
+  --user     superuser of both clusters (default: postgres)
+  --replace  drop DATABASE on DEST first; without it DATABASE must not exist there
+  --no-roles leave the roles and grants of the cluster alone
+
+Roles and their password hashes come across with the cluster's globals, so a client
+that logs in as its own role keeps working. Owners and grants come with the dump.
+With --no-roles the roles of DEST stay as they are and the dump is restored
+without owners and grants. Afterwards the row count of every table, and the table grants
+unless --no-roles, must match on both sides.
+EOF_USAGE
+}
+
+usage() {
+	print_usage >&2
+	exit 2
+}
+
+log() {
+	printf '==> %s\n' "$*" >&2
+}
+
+die() {
+	printf 'error: %s\n' "$*" >&2
+	exit 1
+}
+
+pg_user=postgres replace=0 roles=1
+args=()
+while (($#)); do
+	case $1 in
+	--user)
+		(($# >= 2)) || usage
+		pg_user=$2
+		shift 2
+		;;
+	--replace)
+		replace=1
+		shift
+		;;
+	--no-roles)
+		roles=0
+		shift
+		;;
+	-h | --help)
+		print_usage
+		exit 0
+		;;
+	-*) usage ;;
+	*)
+		args+=("$1")
+		shift
+		;;
+	esac
+done
+((${#args[@]} == 4)) || usage
+source_container=${args[0]} database=${args[1]} host=${args[2]} dest_container=${args[3]}
+
+# Names go into a shell on the other side. Only plain characters pass.
+name_re='^[A-Za-z0-9][A-Za-z0-9_.-]*$'
+for value in "$source_container" "$database" "$dest_container" "$pg_user"; do
+	[[ $value =~ $name_re ]] || die "'$value' is not a plain name"
+done
+
+docker_cmd=(docker)
+docker info &>/dev/null || docker_cmd=(sudo -n docker)
+"${docker_cmd[@]}" info &>/dev/null || die "this server's Docker is not usable by this user"
+remote_ssh() {
+	ssh -o BatchMode=yes -o ConnectTimeout=15 "$host" "$@"
+}
+remote_docker=$(remote_ssh 'docker info >/dev/null 2>&1 && echo docker || echo "sudo -n docker"' </dev/null) ||
+	die "could not log in to $host over ssh without a prompt"
+
+# psql and friends inside each cluster's container, as the superuser.
+src() {
+	"${docker_cmd[@]}" exec -i "$source_container" "$@"
+}
+# Single quotes work in any login shell. Each argument is quoted because a role name
+# read from the source cluster may hold spaces or shell metacharacters.
+quote() {
+	local arg quoted=
+	for arg in "$@"; do
+		quoted+=" '${arg//\'/\'\\\'\'}'"
+	done
+	printf '%s' "${quoted# }"
+}
+dest() {
+	remote_ssh "$remote_docker exec -i $dest_container $(quote "$@")"
+}
+src_psql() {
+	src psql -U "$pg_user" -d "${1}" -v ON_ERROR_STOP=1 -X -q -At
+}
+dest_psql() {
+	dest psql -U "$pg_user" -d "${1}" -v ON_ERROR_STOP=1 -X -q -At
+}
+
+src true </dev/null || die "container '$source_container' is not running on this server"
+dest true </dev/null || die "container '$dest_container' is not running on $host"
+source_has_database=$(src_psql postgres <<<"select 1 from pg_database where datname = '$database'") ||
+	die "could not query $source_container"
+[[ $source_has_database == 1 ]] || die "database '$database' does not exist in $source_container"
+dest_has_database=$(dest_psql postgres <<<"select 1 from pg_database where datname = '$database'") ||
+	die "could not query $dest_container on $host"
+if [[ $dest_has_database == 1 ]] && ((! replace)); then
+	die "database '$database' already exists in $dest_container; use --replace to drop it"
+fi
+
+# What both sides must agree on: a row count per table, and the grants on tables.
+count_sql=$(
+	cat <<'EOF_SQL'
+select format('select %L as "table", count(*) from %I.%I', schemaname || '.' || tablename, schemaname, tablename)
+from pg_tables
+where schemaname not in ('pg_catalog', 'information_schema')
+order by schemaname, tablename \gexec
+EOF_SQL
+)
+grants_sql="select grantee, table_schema, table_name, privilege_type from information_schema.role_table_grants where table_schema not in ('pg_catalog', 'information_schema') order by 1, 2, 3, 4"
+
+summary() {
+	local side=$1 counts grants=
+	counts=$("${side}_psql" "$database" <<<"$count_sql") || return 1
+	if ((roles)); then
+		grants=$("${side}_psql" "$database" <<<"$grants_sql") || return 1
+	fi
+	printf '%s\n--- grants\n%s\n' "$counts" "$grants"
+}
+
+dump=/tmp/move-postgres-$$.dump
+cleanup() {
+	local status=$?
+	timeout 30 ssh -o BatchMode=yes "$host" "$remote_docker exec $dest_container rm -f $dump" </dev/null &>/dev/null || true
+	exit "$status"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+log "copy the dump of $database to $host"
+src pg_dump -U "$pg_user" -Fc "$database" </dev/null | dest sh -c "cat > $dump"
+
+if ((roles)); then
+	log "apply the roles"
+	# psql exits 0 after a failed statement unless ON_ERROR_STOP is set. It cannot
+	# be set here because CREATE ROLE fails for an existing role. ALTER ROLE still
+	# has to run to set its password hash. Read the output for other errors.
+	role_status=0
+	role_output=$(src pg_dumpall -U "$pg_user" --globals-only </dev/null |
+		dest psql -U "$pg_user" -d postgres -X -q -f - 2>&1) || role_status=$?
+	role_errors=$(grep -E 'ERROR:|FATAL:|^psql: error' <<<"$role_output" | grep -v 'already exists' || true)
+	if ((role_status != 0)) || [[ -n $role_errors ]]; then
+		die "applying the roles on $host failed (exit $role_status):"$'\n'"${role_errors:-$role_output}"
+	fi
+fi
+
+if ((replace)); then
+	log "drop $database on $dest_container"
+	dest dropdb -U "$pg_user" --if-exists --force "$database" </dev/null
+fi
+log "restore $database"
+owner=$pg_user
+if ((roles)); then
+	owner=$(src_psql postgres <<<"select pg_get_userbyid(datdba) from pg_database where datname = '$database'")
+fi
+dest createdb -U "$pg_user" -O "$owner" "$database" </dev/null
+restore_flags=(-j 4)
+((roles)) || restore_flags+=(--no-owner --no-privileges)
+dest pg_restore -U "$pg_user" "${restore_flags[@]}" -d "$database" "$dump" </dev/null
+# A restore leaves no statistics.
+dest vacuumdb -U "$pg_user" --analyze-only "$database" </dev/null
+
+log "compare what both clusters hold"
+source_summary=$(summary src) || die "could not read the tables of $database in $source_container"
+dest_summary=$(summary dest) || die "could not read the tables of $database in $dest_container on $host"
+if [[ $source_summary != "$dest_summary" ]]; then
+	diff <(printf '%s\n' "$source_summary") <(printf '%s\n' "$dest_summary") >&2 || true
+	die "the restored database differs from the source (< is here, > is $host)"
+fi
+log "moved and verified: $(grep -c '' <<<"${source_summary%%--- grants*}") tables"

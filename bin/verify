@@ -1,28 +1,28 @@
 #!/usr/bin/env bash
 # Checks a real server from the operator's machine.
-#   verify.sh installed|closed <tailnet-host> <admin-user> <public-ip>
+#   verify installed|closed <tailnet-host> <admin-user> <public-ip>
 set -euo pipefail
 
 if (($# != 4)) || [[ $1 != installed && $1 != closed ]]; then
-	echo "usage: verify.sh installed|closed <tailnet-host> <admin-user> <public-ip>" >&2
+	echo "usage: verify installed|closed <tailnet-host> <admin-user> <public-ip>" >&2
 	exit 2
 fi
 mode=$1 host=$2 admin=$3 public_ip=$4
 auto_reboot=${AUTO_REBOOT:-04:00}
 
 # shellcheck source-path=SCRIPTDIR
-# shellcheck source=known-hosts.sh
-source "$(dirname "$0")/known-hosts.sh"
-known_hosts=$(e2e_known_hosts "$host")
+# shellcheck source=lib/known-hosts.sh
+source "$(dirname "$0")/lib/known-hosts.sh"
+known_hosts=$(known_hosts_file "$host")
 mkdir -p "$(dirname "$known_hosts")"
 host_key_checking=yes
 if [[ $mode == installed ]]; then
-	# A new install starts a new cycle; drop any key from an earlier server with this name.
+	# A new install may replace the server's host key.
 	rm -f "$known_hosts"
 	host_key_checking=accept-new
 fi
 
-# Runs on the server; prints one key=value line per fact.
+# Runs on the server. It prints one key=value line per fact.
 IFS= read -r -d '' remote_facts <<'REMOTE' || true
 echo "sudo=$(sudo -n true 2>/dev/null && echo yes || echo no)"
 echo "ufw_status=$(sudo -n ufw status verbose 2>&1 | grep -E '^(Status|Default):' | tr '\n' ' ')"
