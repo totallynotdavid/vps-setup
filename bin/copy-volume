@@ -1,0 +1,142 @@
+#!/usr/bin/env bash
+# Copies a Docker volume, or a directory, from this server to another and checks the copy.
+# It runs on the source server, so the data goes straight to the new server:
+#   ssh old 'bash -s -- [--quick] SOURCE HOST[:TARGET]' < bin/copy-volume
+set -euo pipefail
+
+print_usage() {
+	cat <<'EOF_USAGE'
+usage: copy-volume [--quick] SOURCE HOST[:TARGET]
+
+  SOURCE   a Docker volume name, or an absolute directory, on this server
+  HOST     the new server, as ssh names it; ssh must log in without a prompt
+  TARGET   the volume or directory on HOST (default: the same as SOURCE)
+  --quick  compare names, types, sizes, modes, owners and link targets only,
+           not the content of the files
+
+Nothing may be using SOURCE, and TARGET must be empty. The copy keeps numeric
+owners and modes, then both sides list what they hold and the lists must match.
+EOF_USAGE
+}
+
+usage() {
+	print_usage >&2
+	exit 2
+}
+
+log() {
+	printf '==> %s\n' "$*" >&2
+}
+
+die() {
+	printf 'error: %s\n' "$*" >&2
+	exit 1
+}
+
+quick=0
+args=()
+while (($#)); do
+	case $1 in
+	--quick)
+		quick=1
+		shift
+		;;
+	-h | --help)
+		print_usage
+		exit 0
+		;;
+	-*) usage ;;
+	*)
+		args+=("$1")
+		shift
+		;;
+	esac
+done
+((${#args[@]} == 2)) || usage
+source_spec=${args[0]}
+host=${args[1]%%:*}
+target_spec=${args[1]#*:}
+[[ ${args[1]} == *:* ]] || target_spec=$source_spec
+
+# Shell arguments cross to the other server, so only plain characters pass.
+valid_spec() {
+	local volume_re='^[A-Za-z0-9][A-Za-z0-9_.-]*$' path_re='^/[A-Za-z0-9_./-]+$'
+	[[ $1 =~ $volume_re || ($1 =~ $path_re && $1 != *..*) ]]
+}
+valid_spec "$source_spec" || die "SOURCE '$source_spec' is not a volume name or an absolute path of plain characters"
+valid_spec "$target_spec" || die "TARGET '$target_spec' is not a volume name or an absolute path of plain characters"
+[[ -n $host ]] || usage
+
+# Docker may need sudo on either server. Read the remote choice once and verify SSH
+# and Docker before starting the copy.
+docker_cmd=(docker)
+docker info &>/dev/null || docker_cmd=(sudo -n docker)
+"${docker_cmd[@]}" info &>/dev/null || die "this server's Docker is not usable by this user"
+remote_ssh() {
+	ssh -o BatchMode=yes -o ConnectTimeout=15 "$host" "$@"
+}
+remote_docker=$(remote_ssh 'docker info >/dev/null 2>&1 && echo docker || echo "sudo -n docker"' </dev/null) ||
+	die "could not log in to $host over ssh without a prompt"
+remote_ssh "$remote_docker info >/dev/null 2>&1" </dev/null || die "Docker is not usable on $host by the ssh user"
+
+image=alpine:3
+send_name=copy-volume-send-$$
+receive_name=copy-volume-receive-$$
+
+mount_of() {
+	printf '%s:/v%s' "$1" "${2:-}"
+}
+
+source_exists() {
+	if [[ $source_spec == /* ]]; then
+		[[ -d $source_spec ]]
+	else
+		"${docker_cmd[@]}" volume inspect "$source_spec" &>/dev/null
+	fi
+}
+source_exists || die "SOURCE '$source_spec' does not exist on this server"
+
+users_of_source() {
+	"${docker_cmd[@]}" ps -q |
+		xargs -r "${docker_cmd[@]}" inspect --format '{{.Name}}{{range .Mounts}} {{.Name}} {{.Source}}{{end}}' |
+		awk -v spec="$source_spec" '{ for (i = 2; i <= NF; i++) if ($i == spec) { print substr($1, 2); break } }'
+}
+users=$(users_of_source)
+[[ -z $users ]] || die "running containers use '$source_spec': ${users//$'\n'/, }; stop them first"
+
+target_entries=$(remote_ssh "$remote_docker run --rm --network none -v $(mount_of "$target_spec" :ro) $image ls -A /v" </dev/null) ||
+	die "could not read '$target_spec' on $host"
+[[ -z $target_entries ]] || die "'$target_spec' on $host is not empty; empty it, or remove the volume, and run again"
+
+# The manifest runs in a container on each side, with the same script.
+manifest_script="cd /v && { find . -mindepth 1 ! -type f -exec stat -c '%n|%F|%a|%u|%g|%N' {} + ; find . -type f -exec stat -c '%n|%F|%s|%a|%u|%g' {} + ; "
+if ((! quick)); then
+	manifest_script+="find . -type f -exec sha256sum {} + ; "
+fi
+manifest_script+="} | LC_ALL=C sort > /tmp/list && echo \$(wc -l < /tmp/list) entries \$(sha256sum < /tmp/list)"
+
+cleanup() {
+	local status=$?
+	"${docker_cmd[@]}" rm -f "$send_name" &>/dev/null || true
+	timeout 30 ssh -o BatchMode=yes "$host" "$remote_docker rm -f $receive_name" </dev/null &>/dev/null || true
+	exit "$status"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+# The log driver is off because a container whose output nobody reads would write
+# the whole stream into its log.
+log "copy $source_spec to $host:$target_spec"
+"${docker_cmd[@]}" run --rm --name "$send_name" --network none --log-driver none \
+	-v "$(mount_of "$source_spec" :ro)" "$image" tar cf - -C /v . |
+	remote_ssh "$remote_docker run --rm -i --name $receive_name --network none --log-driver none -v $(mount_of "$target_spec") $image tar xf - --numeric-owner -p -C /v"
+
+log "compare what both sides hold"
+source_manifest=$("${docker_cmd[@]}" run --rm --network none -v "$(mount_of "$source_spec" :ro)" "$image" sh -c "$manifest_script")
+target_manifest=$(remote_ssh "$remote_docker run --rm --network none -v $(mount_of "$target_spec" :ro) $image sh -c $(printf '%q' "$manifest_script")" </dev/null)
+if [[ $source_manifest != "$target_manifest" ]]; then
+	printf 'this server: %s\n%s: %s\n' "$source_manifest" "$host" "$target_manifest" >&2
+	die "the copy differs from the source"
+fi
+log "copied and verified: $source_manifest"
