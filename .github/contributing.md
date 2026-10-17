@@ -13,7 +13,7 @@ mise install
 ## The codebase
 
 See [Architecture](../docs/architecture.md) for the code map, how
-`dist/install.sh` is assembled and what each test covers.
+`dist/install.sh` is assembled and how the tests are built.
 
 ## Checks
 

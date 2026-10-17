@@ -27,7 +27,7 @@
 - [How it works](./how-it-works.md): what each step does on the server, and why
   in that order.
 - [Architecture](./architecture.md): the code map, how `dist/install.sh` is
-  assembled and what each unit test covers.
+  assembled and how the unit tests are built.
 - [Testing](./testing.md): the end-to-end harness and its AWS setup.
 - [Releasing](./releasing.md): cut and check a release.
 
