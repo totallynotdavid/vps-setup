@@ -14,7 +14,8 @@ steps/install/   the install phase, one file per step: 00-config,
                  05-first-boot, 06-upgrade, 10-user, 20-tailscale, 30-firewall,
                  35-docker-guard, 40-updates, 90-next-steps
 steps/close-ssh/ the close-ssh phase: 10-session, 20-firewall, 30-openssh, 40-root
-bin/             provision, resolve-key and release, which run on your machine
+bin/             provision, resolve-key, verify and release, which run on your
+                 machine, and the copy and move tools for Dokploy servers
 tests/           unit tests that run anywhere, and tests/e2e for real servers
 tests/e2e/aws/   the Terraform module and IAM policy for the EC2 harness
 mise.toml        the tasks: build, check, release and the e2e:aws family
@@ -25,32 +26,31 @@ mise.toml        the tasks: build, check, release and the e2e:aws family
 
 `build` writes the two lines that start the script (`#!/usr/bin/env bash` and
 `set -euo pipefail`), then appends `lib/*.sh`, `steps/install/*.sh` and
-`steps/close-ssh/*.sh` in that order with a comment naming each file, then a
-last line, `main "$@"`. It exports `LC_ALL=C` so the glob order does not depend
-on the locale. It then writes the checksum next to the script.
+`steps/close-ssh/*.sh` in that order with a comment naming each file. Then it
+writes two arrays, `install_steps` and `close_ssh_steps`, and a last line,
+`main "$@"`. It exports `LC_ALL=C` so the glob order does not depend on the
+locale. It then writes the checksum next to the script.
 
 `dist/` is gitignored, and CI builds the published script from a tag. Two builds
 of one tree are byte-identical.
 
 Fragments contain only function definitions. Only `main "$@"` runs anything, and
-it is the last line, so a truncated download runs nothing. `tests/guards.sh`
-checks this by cutting the last line off.
+it is the last line, so a truncated download runs nothing.
 
 ## The dispatcher
 
 `main` in `lib/dispatch.sh` takes one argument. `run_phase` checks the OS, then
-root, then runs every function whose name starts with `install_` or
-`close_ssh_`, sorted by name. The `NN` in a step's file and function name is
-what orders them.
+root, then runs the steps of the phase in the order of its array. `build` fills
+each array from the file names of the phase, so a step runs only when it has a
+file, and the `NN` in the file name orders it. A step's function is the file
+name with the phase as a prefix and dashes as underscores: `20-tailscale.sh`
+defines `install_20_tailscale`.
 
-This has three consequences:
+This has two consequences:
 
 - One phase's steps share a namespace with every other fragment, because it is
   one file. Helpers therefore carry the step's topic as a prefix (`config_`,
-  `user_`, `tailscale_`, `session_`) and never start with `install_` or
-  `close_ssh_`, or the dispatcher would run them as steps.
-- ShellCheck cannot see that steps are called by name, so `.shellcheckrc`
-  disables SC2329.
+  `user_`, `tailscale_`, `session_`).
 - The OS check comes before the root check, so a wrong system is refused for the
   right reason whoever runs it.
 
@@ -65,26 +65,17 @@ A new release goes into `supported_os` after the AWS scenarios pass on it. See
 
 ## Tests
 
-Each of these runs anywhere and needs no root. `mise run check` runs them all.
+Each file in `tests/` is named for the code it tests, runs anywhere and needs no
+root. `mise run check` runs them all. A test either sources the fragments or
+runs `dist/install.sh` or a script in `bin/`, with fake commands placed first on
+`PATH`. The tests for `bin/copy-*`, `bin/move-*` and `systemd/compose@.service`
+use a real Docker daemon, replace only `ssh`, and skip when Docker is not
+usable. `tests/guards.sh` skips its refusal tests only for root on a supported
+release, because that is the one caller that would really run `install`.
 
-- `tests/guards.sh`: the dispatcher and the refusals, through the generated
-  `dist/install.sh`. The refusal tests skip only for root on a supported
-  release, because that is the one caller that would really run `install`.
-- `tests/os.sh`: the OS gate, with os-release fields the test supplies, so it
-  gives the same result on any host.
-- `tests/first-boot.sh`: the first-boot wait, against a fake `cloud-init`.
-- `tests/upgrade.sh`: the upgrade step, against fake `tailscale`, `dpkg` and
-  `apt-get`.
-- `tests/docker-guard.sh`: the docker guard step, on temporary files and not on
-  `/etc/ufw`, against fake `ufw`, `iptables` and `ip6tables`.
-- `tests/config.sh`: input validation, against the source fragments.
-- `tests/updates.sh`: the `unattended-upgrades` policy that step 40 writes.
-- `tests/quiet.sh`: the `quiet` helper.
-- `tests/resolve-key.sh`: `bin/resolve-key` against a fake `curl`, offline.
-
-`os.sh`, `first-boot.sh`, `upgrade.sh`, `docker-guard.sh`, `config.sh`,
-`updates.sh` and `quiet.sh` source the fragments. A fake command is a script
-placed first on `PATH`.
+`tests/lib/helpers.sh` holds what the unit tests share: `assert`, the failure
+count, and a local `ssh` stand-in. `tests/e2e/lib.sh` does the same for the
+end-to-end scenarios.
 
 `tests/e2e/` needs a real server, and [Testing](./testing.md) describes it.
 
@@ -93,7 +84,6 @@ placed first on `PATH`.
 - The server script never reads a secret. It gets a file path and passes it on.
 - `bin/` is for your machine and `steps/` is for the server. `install.sh` never
   calls anything in `bin/`.
-- `bin/provision` runs `tests/e2e/verify.sh` and `tests/e2e/known-hosts.sh`, so
-  the driver and the harness check the server the same way. That makes
-  `tests/e2e` more than test code: `bin/provision` refers to those two files by
-  path.
+- `bin/provision` and the end-to-end scenarios both run `bin/verify` and source
+  `bin/lib/known-hosts.sh`, so the driver and the harness check the server the
+  same way.
