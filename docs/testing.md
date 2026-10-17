@@ -14,11 +14,11 @@ before and after to show the second run changed nothing, reboots, and checks the
 closed state once more. The state includes `/etc/ufw/after.rules` and
 `/etc/ufw/after6.rules`, so it checks that the docker guard is written once.
 
-`tests/e2e/verify.sh installed|closed <tailnet-host> <admin-user> <public-ip>`
-checks a real server from your machine. `bin/provision` uses it too. Both modes
-check that the tailnet login works, that ufw is active and denies incoming
-traffic, and that `DOCKER-USER` holds the rule that drops new connections, for
-`iptables` and `ip6tables`.
+`bin/verify installed|closed <tailnet-host> <admin-user> <public-ip>` checks a
+real server from your machine. `bin/provision` uses it too. Both modes check
+that the tailnet login works, that ufw is active and denies incoming traffic,
+and that `DOCKER-USER` holds the rule that drops new connections, for `iptables`
+and `ip6tables`.
 
 - `installed` also checks that `sudo` works, that `unattended-upgrades` is
   active and allows the Tailscale origin, that the automatic-reboot setting
@@ -51,7 +51,7 @@ checks:
   reboot.
 - The `docker run -p` port is closed over IPv6 too.
 
-It ends with `verify.sh closed`.
+It ends with `bin/verify closed`.
 
 ## On AWS
 
