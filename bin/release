@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Tags and pushes a release: bin/release vX.Y.Z. The tag push triggers the
-# release workflow.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."

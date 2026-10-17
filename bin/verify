@@ -22,7 +22,6 @@ if [[ $mode == installed ]]; then
 	host_key_checking=accept-new
 fi
 
-# Runs on the server. It prints one key=value line per fact.
 IFS= read -r -d '' remote_facts <<'REMOTE' || true
 echo "sudo=$(sudo -n true 2>/dev/null && echo yes || echo no)"
 echo "ufw_status=$(sudo -n ufw status verbose 2>&1 | grep -E '^(Status|Default):' | tr '\n' ' ')"
