@@ -10,20 +10,12 @@ cd "$(dirname "$0")/../.."
 # shellcheck source-path=SCRIPTDIR/../../bin/lib
 source bin/lib/known-hosts.sh
 # shellcheck source-path=SCRIPTDIR/../..
+source tests/e2e/lib.sh
 source tests/e2e/install-docker.sh
 
 usage() {
 	echo "usage: docker.sh <root@host> <name> --key FILE" >&2
 	exit 2
-}
-
-fail() {
-	printf 'error: %s\n' "$*" >&2
-	exit 1
-}
-
-log() {
-	printf '==> %s\n' "$*" >&2
 }
 
 key_args=()
@@ -53,29 +45,6 @@ known_hosts=$(known_hosts_file "$name")
 host_v4=203.0.113.1 client_v4=203.0.113.2
 host_v6=fd00:203::1 client_v6=fd00:203::2
 plain_port=8080 ingress_port=8081 host_mode_port=8082
-
-tailnet_ssh() {
-	ssh -o BatchMode=yes -o ConnectTimeout=15 -o StrictHostKeyChecking=yes \
-		-o "UserKnownHostsFile=$known_hosts" "$admin@$name" "$@"
-}
-
-# One command line on the server, as root, with no stdin.
-on_server() {
-	tailnet_ssh "sudo $*" </dev/null
-}
-
-failures=0
-
-assert() {
-	local description=$1
-	shift
-	if "$@"; then
-		printf 'PASS %s\n' "$description"
-	else
-		printf 'FAIL %s\n' "$description"
-		failures=$((failures + 1))
-	fi
-}
 
 # curl exit 28 is a timeout, which is what a DROP looks like. Any other failure
 # (refused, unreachable, ssh itself) means the test did not measure the guard.
@@ -114,7 +83,7 @@ check_refused() {
 wait_for_local() {
 	local port=$1 deadline=$((SECONDS + 240))
 	until answers_locally "$port" 2>/dev/null; do
-		((SECONDS < deadline)) || fail "port $port did not answer on 127.0.0.1 within four minutes"
+		((SECONDS < deadline)) || die "port $port did not answer on 127.0.0.1 within four minutes"
 		sleep 3
 	done
 }
@@ -123,18 +92,6 @@ wait_for_containers() {
 	wait_for_local "$plain_port"
 	wait_for_local "$ingress_port"
 	wait_for_local "$host_mode_port"
-}
-
-wait_for_reboot() {
-	local boot_before=$1 boot_now deadline=$((SECONDS + 180))
-	while ((SECONDS < deadline)); do
-		boot_now=$(tailnet_ssh 'cat /proc/sys/kernel/random/boot_id' 2>/dev/null </dev/null) || boot_now=
-		if [[ -n $boot_now && $boot_now != "$boot_before" ]]; then
-			return 0
-		fi
-		sleep 3
-	done
-	return 1
 }
 
 # The veth pair and the namespace are gone after a reboot, so this runs again then.
@@ -161,7 +118,7 @@ REMOTE
 start_containers() {
 	local private_ip
 	private_ip=$(on_server "ip -4 route get 192.0.2.1" | awk '{for (i = 1; i < NF; i++) if ($i == "src") print $(i + 1)}')
-	[[ -n $private_ip ]] || fail "could not read the server's private address"
+	[[ -n $private_ip ]] || die "could not read the server's private address"
 	on_server "docker swarm init --advertise-addr $private_ip" >/dev/null
 	on_server "docker run -d --name plain --restart unless-stopped -p $plain_port:80 nginx:alpine" >/dev/null
 	on_server "docker service create --name ingress --publish published=$ingress_port,target=80 nginx:alpine" >/dev/null
@@ -172,7 +129,7 @@ log "provision"
 bin/provision "${key_args[@]}" "$target" "$name"
 
 log "install Docker"
-install_docker >&2 || fail "could not install Docker"
+install_docker >&2 || die "could not install Docker"
 log "$(on_server 'docker version --format "Docker {{.Server.Version}}"')"
 
 log "publish nginx three ways, and add a public interface"
@@ -236,7 +193,7 @@ check_refused "after systemctl restart docker"
 log "reboot"
 boot_id=$(tailnet_ssh 'cat /proc/sys/kernel/random/boot_id' </dev/null)
 on_server 'systemctl reboot' || true
-wait_for_reboot "$boot_id" || fail "$name did not come back within three minutes"
+wait_for_reboot "$boot_id" || die "$name did not come back within three minutes"
 build_public_interface
 wait_for_containers
 check_refused "after a reboot"
