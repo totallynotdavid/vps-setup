@@ -12,7 +12,7 @@ run = "./build"
 description = "Build, lint, check formatting and run the tests"
 depends = ["build"]
 run = [
-	"shellcheck dist/install.sh build $(find bin -type f) tests/*.sh tests/e2e/*.sh",
+	"shellcheck dist/install.sh build $(find bin -type f) tests/*.sh tests/lib/*.sh tests/e2e/*.sh",
 	"shfmt -ln bash -d .",
 	"terraform -chdir=tests/e2e/aws fmt -check -recursive",
 	"terraform -chdir=tests/e2e/aws init -input=false -backend=false",

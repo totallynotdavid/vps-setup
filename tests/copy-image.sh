@@ -5,6 +5,8 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
+# shellcheck source-path=SCRIPTDIR/..
+source tests/lib/helpers.sh
 
 if ! docker info &>/dev/null; then
 	echo "SKIP copy-image tests: docker is not usable"
@@ -17,7 +19,6 @@ image=copy-image-test-$suffix:1
 # The test picks a free port instead of assuming 5000 is unused.
 port=$(python3 -I -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')
 registry=registry-$port
-failures=0
 cleanup() {
 	docker rm -f "$registry" &>/dev/null || true
 	docker volume rm -f "$registry" &>/dev/null || true
@@ -27,25 +28,8 @@ cleanup() {
 trap cleanup EXIT
 
 mkdir "$tmp/bin"
-cat >"$tmp/bin/ssh" <<'FAKE_SSH'
-#!/usr/bin/env bash
-while [[ $1 == -o ]]; do shift 2; done
-shift
-exec bash -c "$*"
-FAKE_SSH
-chmod +x "$tmp/bin/ssh"
+install_local_ssh "$tmp/bin"
 PATH=$tmp/bin:$PATH
-
-assert() {
-	local description=$1
-	shift
-	if "$@"; then
-		printf 'PASS %s\n' "$description"
-	else
-		printf 'FAIL %s\n' "$description"
-		failures=$((failures + 1))
-	fi
-}
 
 copy() {
 	bash -s -- "$@" <bin/copy-image

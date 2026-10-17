@@ -5,6 +5,8 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
+# shellcheck source-path=SCRIPTDIR/..
+source tests/lib/helpers.sh
 
 if ! docker info &>/dev/null; then
 	echo "SKIP copy-volume tests: docker is not usable"
@@ -16,7 +18,6 @@ suffix=$$
 source_volume=copy-vol-source-$suffix target_volume=copy-vol-target-$suffix
 big_volume=copy-vol-big-$suffix big_target=copy-vol-big-target-$suffix
 holder=copy-vol-holder-$suffix
-failures=0
 cleanup() {
 	docker rm -f "$holder" &>/dev/null || true
 	docker ps -aq --filter name=copy-volume- | xargs -r docker rm -f &>/dev/null || true
@@ -26,25 +27,8 @@ cleanup() {
 trap cleanup EXIT
 
 mkdir "$tmp/bin"
-cat >"$tmp/bin/ssh" <<'FAKE_SSH'
-#!/usr/bin/env bash
-while [[ $1 == -o ]]; do shift 2; done
-shift
-exec bash -c "$*"
-FAKE_SSH
-chmod +x "$tmp/bin/ssh"
+install_local_ssh "$tmp/bin"
 PATH=$tmp/bin:$PATH
-
-assert() {
-	local description=$1
-	shift
-	if "$@"; then
-		printf 'PASS %s\n' "$description"
-	else
-		printf 'FAIL %s\n' "$description"
-		failures=$((failures + 1))
-	fi
-}
 
 copy() {
 	bash -s -- "$@" <bin/copy-volume

@@ -2,7 +2,6 @@ sshd_installed() {
 	[[ -x /usr/sbin/sshd ]]
 }
 
-# Prints the first port sshd listens on, 22 when sshd is absent.
 sshd_port() {
 	local port=
 	if sshd_installed; then

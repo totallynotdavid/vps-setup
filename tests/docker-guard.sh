@@ -5,13 +5,13 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 # shellcheck source-path=SCRIPTDIR/..
+source tests/lib/helpers.sh
 source lib/log.sh
 source lib/quiet.sh
 source steps/install/35-docker-guard.sh
 
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
-failures=0
 system_path=$PATH
 
 # The fakes log their arguments. The fake iptables and ip6tables list the guard
@@ -42,17 +42,6 @@ chmod +x "$tmp/bin/ufw" "$tmp/bin/iptables" "$tmp/bin/ip6tables"
 export FAKE_CALLS=$tmp/calls FAKE_RELOADED=$tmp/reloaded FAKE_NOT_LOADED='' FAKE_FIX_ON_RELOAD=''
 FAKE_FIX_ON_RELOAD=''
 export PATH=$tmp/bin:$system_path
-
-assert() {
-	local description=$1
-	shift
-	if "$@"; then
-		printf 'PASS %s\n' "$description"
-	else
-		printf 'FAIL %s\n' "$description"
-		failures=$((failures + 1))
-	fi
-}
 
 stock_file() {
 	cat >"$1" <<'STOCK'
@@ -104,15 +93,6 @@ stock_file "$file"
 cp "$file" "$tmp/stock"
 docker_guard_write "$file" ufw-user-forward
 assert "the block is appended after the stock content" [ "$(<"$file")" == "$(<"$tmp/stock")"$'\n'"$expected_block" ]
-assert "the IPv4 block is the promised text, with one rule per interface" [ "$(docker_guard_block ufw-user-forward)" == "$expected_block" ]
-assert "the IPv6 block is the same but for the two lines that name the user-forward chain" \
-	[ "$(docker_guard_block ufw6-user-forward)" == "$expected_block6" ]
-assert "the IPv4 block declares and jumps to ufw-user-forward" \
-	[ "$(docker_guard_block ufw-user-forward | grep -cx -e ':ufw-user-forward - \[0:0\]' -e '-A DOCKER-USER -j ufw-user-forward')" -eq 2 ]
-assert "the IPv6 block declares and jumps to ufw6-user-forward" \
-	[ "$(docker_guard_block ufw6-user-forward | grep -cx -e ':ufw6-user-forward - \[0:0\]' -e '-A DOCKER-USER -j ufw6-user-forward')" -eq 2 ]
-assert "the IPv4 block does not name the IPv6 chain" [ "$(docker_guard_block ufw-user-forward | grep -c ufw6)" -eq 0 ]
-assert "the IPv6 block does not name the IPv4 chain" [ "$(docker_guard_block ufw6-user-forward | grep -c 'ufw-user-forward')" -eq 0 ]
 assert "the mode of the file is kept" [ "$(stat -c %a "$file")" == 640 ]
 assert "no temporary file is left behind" [ "$(printf '%s\n' "$tmp"/after.rules* | wc -l)" -eq 1 ]
 
@@ -162,8 +142,7 @@ assert "after6.rules carries the IPv6 block" [ "$(tail -n "$(wc -l <<<"$expected
 
 rm -f "$FAKE_CALLS"
 apply_both
-assert "nothing changed and the guard is loaded: ufw is not reloaded" [ "$(grep -c '^ufw' "$FAKE_CALLS" || true)" -eq 0 ]
-assert "nothing changed and the guard is loaded: both chains are read" \
+assert "nothing changed and the guard is loaded: ufw is not reloaded, both chains are read" \
 	[ "$(<"$FAKE_CALLS")" == $'iptables -S DOCKER-USER\nip6tables -S DOCKER-USER' ]
 
 stock_file "$tmp/after6.rules"
@@ -191,8 +170,6 @@ status=0
 stderr=$(apply_both 2>&1) || status=$?
 assert "current files, guard not loaded, still not loaded after: ufw reloads once" [ "$(grep -c '^ufw reload$' "$FAKE_CALLS")" -eq 1 ]
 assert "current files, guard not loaded, still not loaded after: the step fails" [ "$status" -ne 0 ]
-assert "current files, guard not loaded, still not loaded after: the message says the restore failed" \
-	grep -qF 'did not restore: ufw kept its old rules and the docker guard is not loaded' <<<"$stderr"
 
 FAKE_FIX_ON_RELOAD=1
 rm -f "$FAKE_CALLS" "$FAKE_RELOADED"

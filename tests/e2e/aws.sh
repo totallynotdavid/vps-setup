@@ -316,10 +316,7 @@ case $1 in
 	print_usage
 	exit 0
 	;;
-up | down | sweep)
-	require_inputs 0
-	;;
-login)
+up | down | sweep | login)
 	require_inputs 0
 	;;
 run | refuse | docker | sidecar | releases)

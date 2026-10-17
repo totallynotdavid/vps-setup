@@ -4,12 +4,12 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 # shellcheck source-path=SCRIPTDIR/..
+source tests/lib/helpers.sh
 source lib/log.sh
 source steps/install/05-first-boot.sh
 
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
-failures=0
 system_path=$PATH
 
 # The fake logs its arguments and exits with $FAKE_STATUS. The fake timeout stands
@@ -24,17 +24,6 @@ FAKE
 printf '#!/usr/bin/env bash\nexit 124\n' >"$tmp/expired/timeout"
 chmod +x "$tmp/bin/cloud-init" "$tmp/expired/timeout"
 export FAKE_CALLS=$tmp/calls
-
-assert() {
-	local description=$1
-	shift
-	if "$@"; then
-		printf 'PASS %s\n' "$description"
-	else
-		printf 'FAIL %s\n' "$description"
-		failures=$((failures + 1))
-	fi
-}
 
 # Sets status, stdout and stderr for the step on the given PATH, with cloud-init exiting as given.
 run_step() {

@@ -7,19 +7,12 @@
 set -euo pipefail
 
 repo=$(cd "$(dirname "$0")/../.." && pwd)
+# shellcheck source-path=SCRIPTDIR/../..
+source "$repo/tests/e2e/lib.sh"
 
 usage() {
 	echo "usage: login-url.sh <root@host> <name>" >&2
 	exit 2
-}
-
-log() {
-	printf '==> %s\n' "$*" >&2
-}
-
-die() {
-	printf 'error: %s\n' "$*" >&2
-	exit 1
 }
 
 (($# == 2)) || usage
@@ -41,19 +34,6 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-
-failures=0
-
-assert() {
-	local description=$1
-	shift
-	if "$@"; then
-		printf 'PASS %s\n' "$description"
-	else
-		printf 'FAIL %s\n' "$description"
-		failures=$((failures + 1))
-	fi
-}
 
 # The join timeout is ten minutes. Allow it to end 90 seconds early or late for
 # the time ssh and the earlier steps take.

@@ -172,17 +172,17 @@ After `close-ssh`, the server has:
   `ufw route allow` rule accepted;
 - the same SSH host key as before.
 
-`tests/e2e/verify.sh closed` checks each of these. systemd's ssh generator can
-leave `sshd-unix-local.socket` listening on a Unix socket. It is not reachable
-from the network.
+`bin/verify closed` checks each of these. systemd's ssh generator can leave
+`sshd-unix-local.socket` listening on a Unix socket. It is not reachable from
+the network.
 
 ## bin/provision
 
 **Verify, then close.** `bin/provision` runs `close-ssh` only after
-`tests/e2e/verify.sh installed` has logged in over the tailnet from your
-machine, so a Tailscale problem shows up while public SSH still exists. It runs
-`close-ssh` through that same tailnet session, which is the one place the
-session check accepts.
+`bin/verify installed` has logged in over the tailnet from your machine, so a
+Tailscale problem shows up while public SSH still exists. It runs `close-ssh`
+through that same tailnet session, which is the one place the session check
+accepts.
 
 **Reboot before close.** After `install`, `bin/provision` checks the server for
 `/var/run/reboot-required`. If it exists, `bin/provision` notes

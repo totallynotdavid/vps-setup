@@ -7,6 +7,8 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
+# shellcheck source-path=SCRIPTDIR/..
+source tests/lib/helpers.sh
 
 if ! docker info &>/dev/null; then
 	echo "SKIP move-dokploy tests: docker is not usable"
@@ -16,7 +18,6 @@ fi
 tmp=$(mktemp -d)
 suffix=$$
 postgres=dokploy-postgres.1.test$suffix
-failures=0
 cleanup() {
 	docker rm -f "$postgres" &>/dev/null || true
 	rm -rf "$tmp"
@@ -40,17 +41,6 @@ esac
 FAKE_SSH
 chmod +x "$tmp/bin/ssh"
 PATH=$tmp/bin:$PATH
-
-assert() {
-	local description=$1
-	shift
-	if "$@"; then
-		printf 'PASS %s\n' "$description"
-	else
-		printf 'FAIL %s\n' "$description"
-		failures=$((failures + 1))
-	fi
-}
 
 sql() {
 	docker exec -i "$postgres" psql -U dokploy -d dokploy -v ON_ERROR_STOP=1 -X -q -At "$@"

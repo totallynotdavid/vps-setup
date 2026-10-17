@@ -4,6 +4,8 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
+# shellcheck source-path=SCRIPTDIR/..
+source tests/lib/helpers.sh
 export LC_ALL=C
 script=dist/install.sh
 [[ -f $script ]] || {
@@ -13,18 +15,6 @@ script=dist/install.sh
 
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
-failures=0
-
-assert() {
-	local description=$1
-	shift
-	if "$@"; then
-		printf 'PASS %s\n' "$description"
-	else
-		printf 'FAIL %s\n' "$description"
-		failures=$((failures + 1))
-	fi
-}
 
 head -n -1 "$script" >"$tmp/definitions.sh"
 # shellcheck source=/dev/null

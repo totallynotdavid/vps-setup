@@ -1,2 +1,2 @@
-# tests/config.sh sources the fragments; follow them so their code is checked too.
+# The tests source the fragments. Follow them so ShellCheck checks them too.
 external-sources=true
