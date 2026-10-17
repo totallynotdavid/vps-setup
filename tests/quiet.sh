@@ -4,22 +4,11 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 # shellcheck source-path=SCRIPTDIR/..
+source tests/lib/helpers.sh
 source lib/quiet.sh
 
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
-failures=0
-
-assert() {
-	local description=$1
-	shift
-	if "$@"; then
-		printf 'PASS %s\n' "$description"
-	else
-		printf 'FAIL %s\n' "$description"
-		failures=$((failures + 1))
-	fi
-}
 
 # Sets status, stdout and stderr for the command.
 run() {

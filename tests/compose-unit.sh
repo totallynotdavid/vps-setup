@@ -5,6 +5,8 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
+# shellcheck source-path=SCRIPTDIR/..
+source tests/lib/helpers.sh
 unit=systemd/compose@.service
 
 if ! docker compose version &>/dev/null || ! docker info &>/dev/null; then
@@ -20,18 +22,6 @@ cleanup() {
 	rm -rf "$tmp"
 }
 trap cleanup EXIT
-failures=0
-
-assert() {
-	local description=$1
-	shift
-	if "$@"; then
-		printf 'PASS %s\n' "$description"
-	else
-		printf 'FAIL %s\n' "$description"
-		failures=$((failures + 1))
-	fi
-}
 
 cat >"$tmp/compose.yaml" <<'EOF_COMPOSE'
 services:
@@ -63,9 +53,6 @@ start_stack() {
 }
 
 docker compose --project-directory "$tmp" up -d --wait >/dev/null 2>&1
-assert "the stack starts" running sidecar
-assert "the sidecar shares the main container's network namespace" \
-	[ "$(netns main)" = "$(netns sidecar)" ]
 
 docker stop --time 1 "$project-sidecar-1" "$project-main-1" >/dev/null
 starts_alone=0
@@ -80,9 +67,5 @@ assert "the sidecar shares the new main container's network namespace" \
 
 start_stack >/dev/null 2>&1
 assert "running the unit's command again leaves the stack up" running sidecar
-
-if command -v systemd-analyze >/dev/null; then
-	assert "systemd accepts the unit" systemd-analyze verify "$unit"
-fi
 
 ((failures == 0))

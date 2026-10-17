@@ -5,6 +5,8 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
+# shellcheck source-path=SCRIPTDIR/..
+source tests/lib/helpers.sh
 
 if ! docker info &>/dev/null; then
 	echo "SKIP move-postgres tests: docker is not usable"
@@ -15,7 +17,6 @@ tmp=$(mktemp -d)
 suffix=$$
 old=move-pg-old-$suffix new=move-pg-new-$suffix
 image=postgres:17-alpine
-failures=0
 cleanup() {
 	docker rm -f "$old" "$new" &>/dev/null || true
 	rm -rf "$tmp"
@@ -23,25 +24,8 @@ cleanup() {
 trap cleanup EXIT
 
 mkdir "$tmp/bin"
-cat >"$tmp/bin/ssh" <<'FAKE_SSH'
-#!/usr/bin/env bash
-while [[ $1 == -o ]]; do shift 2; done
-shift
-exec bash -c "$*"
-FAKE_SSH
-chmod +x "$tmp/bin/ssh"
+install_local_ssh "$tmp/bin"
 PATH=$tmp/bin:$PATH
-
-assert() {
-	local description=$1
-	shift
-	if "$@"; then
-		printf 'PASS %s\n' "$description"
-	else
-		printf 'FAIL %s\n' "$description"
-		failures=$((failures + 1))
-	fi
-}
 
 start_cluster() {
 	docker run -d --name "$1" -e POSTGRES_PASSWORD=pw "$image" >/dev/null

@@ -5,12 +5,12 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 # shellcheck source-path=SCRIPTDIR/..
+source tests/lib/helpers.sh
 source lib/log.sh
 source steps/install/20-tailscale.sh
 
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
-failures=0
 
 mkdir "$tmp/bin"
 cat >"$tmp/bin/tailscale" <<'FAKE'
@@ -20,17 +20,6 @@ FAKE
 chmod +x "$tmp/bin/tailscale"
 export FAKE_CALLS=$tmp/calls
 PATH=$tmp/bin:$PATH
-
-assert() {
-	local description=$1
-	shift
-	if "$@"; then
-		printf 'PASS %s\n' "$description"
-	else
-		printf 'FAIL %s\n' "$description"
-		failures=$((failures + 1))
-	fi
-}
 
 join_with() {
 	: >"$FAKE_CALLS"

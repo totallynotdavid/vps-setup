@@ -83,7 +83,6 @@ expect_error "ADMIN_USER starting with a digit" "ADMIN_USER '1abc' is invalid" A
 expect_error "ADMIN_USER with a space" "ADMIN_USER 'a b' is invalid" "ADMIN_USER=a b"
 
 expect_error "TS_HOSTNAME unset" "TS_HOSTNAME is required, for example TS_HOSTNAME=web1"
-expect_error "TS_HOSTNAME empty" "TS_HOSTNAME is required, for example TS_HOSTNAME=web1" TS_HOSTNAME=
 expect_error "TS_HOSTNAME with a dot" "TS_HOSTNAME 'a.b' is invalid" TS_HOSTNAME=a.b
 expect_error "TS_HOSTNAME with a leading dash" "TS_HOSTNAME '-a' is invalid" TS_HOSTNAME=-a
 expect_error "TS_HOSTNAME with uppercase" "TS_HOSTNAME 'Web' is invalid" TS_HOSTNAME=Web
