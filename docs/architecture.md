@@ -14,12 +14,14 @@ steps/install/   the install phase, one file per step: 00-config,
                  05-first-boot, 06-upgrade, 10-user, 20-tailscale, 30-firewall,
                  35-docker-guard, 40-updates, 90-next-steps
 steps/close-ssh/ the close-ssh phase: 10-session, 20-firewall, 30-openssh, 40-root
-bin/             provision, resolve-key, verify and release, which run on your
-                 machine, and the copy and move tools for Dokploy servers
+bin/             provision, resolve-key, verify, check-release-notes and
+                 release, which run on your machine, and the copy and move
+                 tools for Dokploy servers
 tests/           unit tests that run anywhere, and tests/e2e for real servers
 tests/e2e/aws/   the Terraform module and IAM policy for the EC2 harness
 mise.toml        the tasks: build, check, release and the e2e:aws family
-.github/         check.yml runs `mise run check`; release.yml publishes a tag
+.github/         check.yml runs `mise run check`; release.yml dry-runs on
+                 pull requests and publishes a tag
 ```
 
 ## How `dist/install.sh` is assembled
