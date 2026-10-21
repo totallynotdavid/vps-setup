@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Checks that the first line of a notes file names a version. With a tag, it
+# must name that tag's version. Without one, as in a release dry run, any
+# vX.Y.Z version passes.
+set -euo pipefail
+
+usage() {
+	echo "usage: check-release-notes NOTES_FILE [vX.Y.Z]" >&2
+	exit 2
+}
+
+die() {
+	printf 'error: %s\n' "$*" >&2
+	exit 1
+}
+
+(($# == 1 || $# == 2)) || usage
+notes=$1
+tag=${2-}
+
+[[ -f $notes ]] || die "$notes does not exist"
+first=$(head -n 1 "$notes")
+line_re='^vps-setup ([0-9]+\.[0-9]+\.[0-9]+) is out\.$'
+[[ $first =~ $line_re ]] || die "first line of $notes is '$first', expected 'vps-setup X.Y.Z is out.'"
+named=${BASH_REMATCH[1]}
+
+[[ -z $tag ]] && exit 0
+tag_re='^v([0-9]+\.[0-9]+\.[0-9]+)$'
+[[ $tag =~ $tag_re ]] || die "tag $tag is not vX.Y.Z"
+[[ $named == "${BASH_REMATCH[1]}" ]] ||
+	die "first line of $notes is '$first', expected 'vps-setup ${tag#v} is out.'"

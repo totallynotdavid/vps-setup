@@ -25,14 +25,32 @@ mise run release vX.Y.Z
 Then it creates a signed tag with `git tag -s`, so you need a signing key,
 pushes the tag, and prints the URL of the release page.
 
-The tag starts the release workflow (`.github/workflows/release.yml`). It runs
-`./build` on the tagged commit and creates a GitHub release that attaches
-`dist/install.sh` and `dist/install.sh.sha256`. The release body is
-`.github/release-notes.md` followed by GitHub's generated change list. Before it
-builds, the workflow fails if the tag is not `vX.Y.Z` or the first line of the
-notes does not name the tag's version. Nothing generated is committed, so the
-release is the only place the script is published. The download URLs in
-[Manual setup](./manual-setup.md) point at the latest release.
+The tag starts the release workflow (`.github/workflows/release.yml`). It has
+three jobs:
+
+- `preflight` fails if a job names an environment that the repository lacks, or
+  if the tag already has a release.
+- `build` checks the notes, runs `./build`, checks the checksum, builds a second
+  time and fails if the two builds differ.
+- `publish` waits for both, then creates a GitHub release that attaches
+  `dist/install.sh` and `dist/install.sh.sha256`. The release body is
+  `.github/release-notes.md` followed by GitHub's generated change list.
+
+The notes check, `bin/check-release-notes`, fails if the tag is not `vX.Y.Z` or
+the first line of the notes does not name the tag's version. Nothing generated
+is committed, so the release is the only place the script is published. The
+download URLs in [Manual setup](./manual-setup.md) point at the latest release.
+
+## Dry run
+
+The workflow also runs on every pull request and on a manual run
+(`gh workflow run release.yml`). Those runs do everything a tag does except
+`publish`, so a release that would fail fails before the tag. With no tag, the
+notes check only requires the first line to name some `vX.Y.Z` version.
+
+The release uses no secret and no environment. `publish` uses the job's own
+`GITHUB_TOKEN`, so a maintainer who forks the project needs no account setup to
+release.
 
 ## Test the build you publish
 
