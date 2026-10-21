@@ -4,7 +4,11 @@ A release is a signed tag. The tag is the only thing that publishes.
 
 ## Cut a release
 
-From a clean checkout of `master` that matches `origin/master`:
+Write the release notes first. Replace `.github/release-notes.md` with the notes
+for the new version and commit them. Its first line must be
+`vps-setup X.Y.Z is out.`, and the notes follow it.
+
+Then, from a clean checkout of `master` that matches `origin/master`:
 
 ```sh
 mise run release vX.Y.Z
@@ -23,10 +27,12 @@ pushes the tag, and prints the URL of the release page.
 
 The tag starts the release workflow (`.github/workflows/release.yml`). It runs
 `./build` on the tagged commit and creates a GitHub release that attaches
-`dist/install.sh` and `dist/install.sh.sha256`, with generated notes. Nothing
-generated is committed, so the release is the only place the script is
-published. The download URLs in [Manual setup](./manual-setup.md) point at the
-latest release.
+`dist/install.sh` and `dist/install.sh.sha256`. The release body is
+`.github/release-notes.md` followed by GitHub's generated change list. Before it
+builds, the workflow fails if the tag is not `vX.Y.Z` or the first line of the
+notes does not name the tag's version. Nothing generated is committed, so the
+release is the only place the script is published. The download URLs in
+[Manual setup](./manual-setup.md) point at the latest release.
 
 ## Test the build you publish
 
