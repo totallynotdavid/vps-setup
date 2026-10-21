@@ -12,7 +12,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - name: Check the notes name this version
+        run: |
+          version=${GITHUB_REF_NAME#v}
+          expected="vps-setup $version is out."
+          [[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "tag $GITHUB_REF_NAME is not vX.Y.Z" >&2; exit 1; }
+          first=$(head -n 1 .github/release-notes.md)
+          [[ $first == "$expected" ]] || { echo "first line of .github/release-notes.md is '$first', expected '$expected'" >&2; exit 1; }
+        shell: bash
       - run: ./build
-      - run: gh release create "$GITHUB_REF_NAME" dist/install.sh dist/install.sh.sha256 --generate-notes
+      - run: gh release create "$GITHUB_REF_NAME" dist/install.sh dist/install.sh.sha256 --notes-file .github/release-notes.md --generate-notes
         env:
           GH_TOKEN: ${{ github.token }}
