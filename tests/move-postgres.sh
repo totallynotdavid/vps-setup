@@ -85,6 +85,7 @@ move "$old" shop localhost "$new" >"$out" 2>&1 || status=$?
 assert "the move succeeds (exit $status)" [ "$status" -eq 0 ]
 ((status == 0)) || cat "$out"
 
+assert "the summary counts the tables moved" grep -q 'moved and verified: 2 tables$' "$out"
 assert "all rows came across" \
 	[ "$(sql "$new" shop <<<"select (select count(*) from orders) || ' ' || (select count(*) from notes)")" = "500 2" ]
 assert "the reader keeps its grant on orders" \
