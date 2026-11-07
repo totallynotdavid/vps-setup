@@ -121,7 +121,8 @@ ssh ops@web1
 ```
 
 The root password is locked and OpenSSH is gone, so this is the only way in.
-`bin/provision` records the host key under `$TMPDIR/vps-setup-e2e/web1`, or
-`/tmp/vps-setup-e2e/web1`, and leaves `~/.ssh/known_hosts` alone. Closing SSH
+`bin/provision` records the host key under
+`$TMPDIR/vps-setup/known-hosts/web1`, or `/tmp/vps-setup/known-hosts/web1`, and
+leaves `~/.ssh/known_hosts` alone. Closing SSH
 keeps the host key, because OpenSSH is removed and not purged, so a key learned
 before the close still matches after it.
