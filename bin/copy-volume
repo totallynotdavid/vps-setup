@@ -64,6 +64,10 @@ valid_spec() {
 	[[ $1 =~ $volume_re || ($1 =~ $path_re && $1 != *..*) ]]
 }
 valid_spec "$source_spec" || die "SOURCE '$source_spec' is not a volume name or an absolute path of plain characters"
+# Docker lists a bind mount's source as a clean path, so the in-use check compares clean paths.
+if [[ $source_spec == /* ]]; then
+	source_spec=$(realpath -ms -- "$source_spec")
+fi
 valid_spec "$target_spec" || die "TARGET '$target_spec' is not a volume name or an absolute path of plain characters"
 [[ -n $host ]] || usage
 
