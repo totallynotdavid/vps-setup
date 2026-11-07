@@ -94,6 +94,17 @@ assert "a source in use is refused (exit $status)" [ "$status" -ne 0 ]
 assert "the refusal names the container" grep -q "$holder" "$out"
 docker rm -f "$holder" >/dev/null
 
+mkdir "$tmp/data"
+echo hello >"$tmp/data/f"
+docker run -d --name "$holder" -v "$tmp/data:/x" alpine:3 sleep 600 >/dev/null
+for spelling in data data/ ./data data/. data//; do
+	status=0
+	copy "${tmp%/*}/${tmp##*/}/$spelling" "localhost:$tmp/copied" >"$out" 2>&1 || status=$?
+	assert "a directory in use is refused when written as .../$spelling (exit $status)" \
+		grep -q "running containers use" "$out"
+done
+docker rm -f "$holder" >/dev/null
+
 status=0
 copy "$source_volume" 'localhost:../etc' >"$out" 2>&1 || status=$?
 assert "a target path with .. is refused (exit $status)" [ "$status" -ne 0 ]
