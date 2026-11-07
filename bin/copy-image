@@ -64,11 +64,13 @@ host=${args[0]}
 images=("${args[@]:1}")
 
 image_re='^[a-z0-9][a-z0-9._/-]*:[A-Za-z0-9_][A-Za-z0-9_.-]*$'
-port_re='^[0-9]+$'
+port_re='^[1-9][0-9]{0,4}$'
 for image in "${images[@]}"; do
 	[[ $image =~ $image_re ]] || die "'$image' is not a name:tag"
 done
-[[ $port =~ $port_re ]] || die "'$port' is not a port"
+if [[ ! $port =~ $port_re ]] || ((port > 65535)); then
+	die "'$port' is not a port"
+fi
 
 docker_cmd=(docker)
 docker info &>/dev/null || docker_cmd=(sudo -n docker)
