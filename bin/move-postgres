@@ -189,4 +189,4 @@ if [[ $source_summary != "$dest_summary" ]]; then
 	diff <(printf '%s\n' "$source_summary") <(printf '%s\n' "$dest_summary") >&2 || true
 	die "the restored database differs from the source (< is here, > is $host)"
 fi
-log "moved and verified: $(grep -c '' <<<"${source_summary%%--- grants*}") tables"
+log "moved and verified: $(grep -c . <<<"${source_summary%%--- grants*}" || true) tables"
