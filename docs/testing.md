@@ -53,12 +53,26 @@ checks:
 
 It ends with `bin/verify closed`.
 
+`tests/e2e/sidecar.sh <root@host> <name> --key FILE` provisions as `run.sh`
+does, installs Docker and `systemd/compose@.service`, and starts a compose stack
+whose sidecar joins another container's network namespace. It reboots, then
+checks that the unit is active, that both containers run, that they still share
+one namespace and that the sidecar reaches nginx. It ends with
+`bin/verify closed`.
+
+`tests/e2e/login-url.sh <root@host> <name>` runs `bin/provision` without
+`--key` and never opens the login URL, as a node held for device approval
+waits. It checks that the URL is printed, that the install gives up after about
+ten minutes, and that public SSH, sshd and the root password are still usable.
+It takes about 15 minutes.
+
 ## On AWS
 
 `mise run e2e:aws` makes the servers on AWS EC2. It starts a fresh Ubuntu
 instance that looks like a Contabo one (26.04 unless `UBUNTU_VERSION` says
 otherwise), with root login by password over SSH, runs `run.sh` against it, then
-does the same for `refuse-close.sh` and `docker.sh`. Each scenario gets its own
+does the same for `refuse-close.sh`, `docker.sh`, `sidecar.sh` and
+`login-url.sh`. Each scenario gets its own
 instance, because `provision` closes SSH, and every instance is destroyed on any
 exit. cloud-init makes the start state, and the security group opens SSH to your
 public IP only.
@@ -88,12 +102,12 @@ public IP only.
 | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `mise run e2e:aws`          | every scenario, each on its own instance. It exits non-zero if one fails                                                                                                                          |
 | `mise run e2e:aws:docker`   | the `docker` scenario alone, on its own instance                                                                                                                                                  |
-| `mise run e2e:aws:releases` | `e2e:aws` once for every release in `supported_os`. It prints `release 22.04: passed` or `release 22.04: FAILED` for each, runs every release even if one fails, and exits non-zero if any failed |
+| `mise run e2e:aws:releases` | `e2e:aws`, without `login`, once for every release in `supported_os`. It prints `release 22.04: passed` or `release 22.04: FAILED` for each, runs every release even if one fails, and exits non-zero if any failed |
 | `mise run e2e:aws:up`       | creates one instance and prints its public IP                                                                                                                                                     |
 | `mise run e2e:aws:down`     | destroys it. Safe to repeat                                                                                                                                                                       |
 | `mise run e2e:aws:sweep`    | terminates leftover instances and security groups tagged `purpose=vps-setup-e2e` that are older than two hours                                                                                    |
 
-`tests/e2e/aws.sh up|run|refuse|docker|down|sweep|all|releases` is the same
+`tests/e2e/aws.sh up|run|refuse|docker|sidecar|login|down|sweep|all|releases` is the same
 interface without mise. `all` takes scenario names, for example
 `aws.sh all docker`, and runs every scenario when it gets none. Set `AWS_REGION`
 to change the region. A missing input exits with status 2 and names every
@@ -136,8 +150,10 @@ instance keeps costing until `sweep` removes it.
 ## What it does not cover
 
 - Releases outside `supported_os`. The OS gate refuses them.
-- The login-URL mode. The AWS harness always passes `--key`.
-- The ten-minute join timeout, and a node held by device approval.
+- A node really held by device approval. The `login` scenario only leaves a
+  login URL unopened, which waits the same way.
+- The login-URL mode on any release but the default. `releases` skips `login`,
+  which does not depend on the release.
 - Providers other than AWS EC2.
 - Docker's nftables backend, and IPv6 for Swarm published ports. The `docker`
   scenario checks IPv6 for the `docker run -p` port only.
