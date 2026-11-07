@@ -53,6 +53,13 @@ status=0
 copy localhost 'bad image' >"$out" 2>&1 || status=$?
 assert "an image name with a space is refused (exit $status)" [ "$status" -ne 0 ]
 
+for bad_port in 0 65536 70000 08 http; do
+	status=0
+	copy --registry --port "$bad_port" localhost "$image" >"$out" 2>&1 || status=$?
+	assert "port $bad_port is refused before any image is copied (exit $status)" \
+		grep -q "'$bad_port' is not a port" "$out"
+done
+
 status=0
 copy --registry --port "$port" localhost "$image" >"$out.stdout" 2>"$out" || status=$?
 assert "an image is published (exit $status)" [ "$status" -eq 0 ]
